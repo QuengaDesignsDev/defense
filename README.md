@@ -32,6 +32,8 @@ Works with mouse and touch (mobile-friendly).
 - Each run awards **cores** (score ÷ 150). Spend them in the main menu on
   permanent upgrades — hull plating, damage amp, reactor, harvester — that
   apply to every future run.
+- Two difficulties, toggled in the main menu: **Normal**, and **Elite**
+  (enemies +50% HP and +40% damage, score and cores ×1.5).
 
 ### Turrets
 
@@ -42,6 +44,7 @@ Works with mouse and touch (mobile-friendly).
 | Frost | hexagon | slows nearby enemies |
 | Laser | diamond | piercing beam |
 | Missile | pentagon | homing shots that hunt the biggest threat |
+| Tesla | octagon | chain lightning that arcs between enemies |
 
 ### Enemies
 
@@ -52,6 +55,7 @@ Works with mouse and touch (mobile-friendly).
 | Tank | pentagon | slow and beefy |
 | Splitter | hexagon | splits into swarm triangles on death |
 | Sniper | pink diamond | from wave 7: holds at range and fires at the fortress |
-| Boss | octagon | every 5th wave; sieges the fortress with damage pulses |
+| Boss | octagon | waves 5, 15, 25…; sieges the fortress with damage pulses |
+| Carrier | purple decagon | waves 10, 20, 30…; circles at range releasing swarms |
 
 Keyboard shortcuts: `P`/`Esc` pause, `Space` starts the next wave early (+15 energy rush bonus).

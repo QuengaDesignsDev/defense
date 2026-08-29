@@ -61,6 +61,7 @@ function ensureAudio() {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* no audio */ }
   }
   if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  startMusic();
 }
 
 function blip(freq, dur, type = "square", vol = 0.05, slide = 0) {
@@ -89,8 +90,31 @@ const sfx = {
   waveStart: () => blip(220, 0.3, "sawtooth", 0.05, 110),
   waveClear: () => { blip(392, 0.12, "triangle", 0.06); setTimeout(() => blip(523, 0.12, "triangle", 0.06), 110); setTimeout(() => blip(659, 0.22, "triangle", 0.06), 220); },
   deny: () => blip(140, 0.12, "square", 0.05, -40),
+  zap: () => blip(rand(1200, 1600), 0.1, "sawtooth", 0.03, -900),
+  snipe: () => blip(500, 0.12, "square", 0.02, -250),
+  warn: () => { blip(180, 0.22, "square", 0.05, -40); setTimeout(() => blip(180, 0.22, "square", 0.05, -40), 280); },
   gameOver: () => { blip(220, 0.4, "sawtooth", 0.08, -120); setTimeout(() => blip(150, 0.7, "sawtooth", 0.08, -90), 250); },
 };
+
+/* ---- generative soundtrack ---- */
+const MUSIC_NOTES = [110, 130.81, 146.83, 164.81, 196]; // A minor pentatonic
+let musicTimer = null;
+let musicStep = 0;
+function musicTick() {
+  if (muted || !audioCtx || audioCtx.state !== "running") return;
+  const bossWave = G.wave > 0 && G.wave % 5 === 0 && G.state === "playing";
+  const inGame = G.state === "playing" || G.state === "intermission";
+  if (musicStep % 2 === 0) blip(bossWave ? 82.4 : 55, 0.32, "sine", 0.04, -8);
+  if (Math.random() < (inGame ? 0.55 : 0.3)) {
+    const note = MUSIC_NOTES[(Math.random() * MUSIC_NOTES.length) | 0] * (Math.random() < 0.3 ? 2 : 1);
+    blip(note, 0.5, "triangle", 0.016);
+  }
+  if (bossWave && musicStep % 4 === 2) blip(41.2, 0.4, "sawtooth", 0.028, -5);
+  musicStep++;
+}
+function startMusic() {
+  if (!musicTimer) musicTimer = setInterval(musicTick, 280);
+}
 
 /* ============================== data ============================== */
 const TURRET_TYPES = {
@@ -109,8 +133,11 @@ const TURRET_TYPES = {
   missile: { name: "MISSILE", color: "#6dff8c", cls: "pent", sides: 5, kind: "missile",
     cost: 110, dmg: 40, rate: 0.7, range: 9999, speed: 300, turn: 4.2, splash: 55,
     desc: "Homing, hunts the biggest threat" },
+  tesla: { name: "TESLA", color: "#ffe94d", cls: "oct", sides: 8, kind: "tesla",
+    cost: 130, dmg: 26, rate: 1.1, range: 240, chains: 2, chainRange: 120,
+    desc: "Chain lightning arcs between enemies" },
 };
-const TURRET_ORDER = ["blaster", "cannon", "frost", "laser", "missile"];
+const TURRET_ORDER = ["blaster", "cannon", "frost", "laser", "missile", "tesla"];
 const MAX_LEVEL = 3;
 const upgradeCost = (type, level) => Math.round(TURRET_TYPES[type].cost * (level === 1 ? 1.2 : 2.0));
 const levelMul = level => Math.pow(1.65, level - 1);
@@ -122,6 +149,7 @@ const ENEMY_TYPES = {
   hex:  { sides: 6, r: 15, hp: 62, speed: 52, dmg: 26, energy: 15, color: "#ffd23f", splits: 3 },
   shoot:{ sides: 4, r: 12, hp: 55, speed: 42, dmg: 22, energy: 12, color: "#ff4d9b", shooter: true, shotEvery: 2.4, holdRange: 300 },
   boss: { sides: 8, r: 40, hp: 950, speed: 26, dmg: 0, energy: 170, color: "#ff3d6e", boss: true, pulseDmg: 55, pulseEvery: 2.0 },
+  boss2:{ sides: 10, r: 36, hp: 800, speed: 30, dmg: 0, energy: 170, color: "#b44dff", boss: true, carrier: true, pulseEvery: 3.0, holdRange: 280 },
 };
 
 const PERKS = [
@@ -146,6 +174,8 @@ let meta = { hull: 0, dmg: 0, react: 0, harv: 0 };
 try { meta = { ...meta, ...JSON.parse(localStorage.getItem("shapeDefense.meta") || "{}") }; } catch (e) { /* fresh start */ }
 let cores = +(localStorage.getItem("shapeDefense.cores") || 0) || 0;
 const metaCost = level => Math.round(10 * Math.pow(1.7, level));
+let elite = localStorage.getItem("shapeDefense.elite") === "1";
+const enemyDmgMul = () => (elite ? 1.4 : 1);
 function saveMeta() {
   localStorage.setItem("shapeDefense.meta", JSON.stringify(meta));
   localStorage.setItem("shapeDefense.cores", String(cores));
@@ -174,6 +204,9 @@ const G = {
   floaters: [],
   motes: [],
   enemyShots: [],
+  bolts: [],
+  ambient: [],
+  hitStop: 0,
   spawnQueue: [],
   spawnTimer: 0,
   spawnInterval: 1,
@@ -261,7 +294,7 @@ function buildWave(wave) {
   if (wave >= 6) push("hex", Math.round(Math.floor(wave / 3) * density));
   if (wave >= 7) push("shoot", Math.max(1, Math.round(Math.floor((wave - 5) / 2) * density)));
   shuffle(q);
-  if (bossWave) q.push("boss");
+  if (bossWave) q.push(wave % 10 === 0 ? "boss2" : "boss");
   G.spawnQueue = q;
   G.spawnInterval = clamp(1.15 - wave * 0.045, 0.35, 1.15);
   G.spawnTimer = 0.4;
@@ -269,7 +302,7 @@ function buildWave(wave) {
 
 function spawnEnemy(type, x, y) {
   const def = ENEMY_TYPES[type];
-  const hpMul = hpMulFor(G.wave) * (def.boss ? 1 + Math.floor(G.wave / 5 - 1) * 0.6 : 1);
+  const hpMul = hpMulFor(G.wave) * (def.boss ? 1 + Math.floor(G.wave / 5 - 1) * 0.6 : 1) * (elite ? 1.5 : 1);
   if (x === undefined) {
     const a = rand(0, TAU);
     const rad = Math.hypot(W, H) / 2 + 60;
@@ -363,7 +396,7 @@ function killEnemy(e) {
       spawnEnemy("tri", e.x + rand(-14, 14), e.y + rand(-14, 14));
     }
   }
-  if (e.def.boss) { sfx.bigBoom(); G.shake = Math.max(G.shake, 14); }
+  if (e.def.boss) { sfx.bigBoom(); G.shake = Math.max(G.shake, 14); G.hitStop = Math.max(G.hitStop, 0.3); }
   else sfx.boom();
 }
 
@@ -372,6 +405,7 @@ function damageFortress(amt) {
   f.hp = Math.max(0, f.hp - amt);
   f.flash = 0.25;
   G.shake = Math.max(G.shake, clamp(amt * 0.35, 4, 16));
+  if (amt >= 30) G.hitStop = Math.max(G.hitStop, 0.12);
   sfx.hitFort();
   if (f.hp <= 0) gameOver();
 }
@@ -443,8 +477,28 @@ function updateEnemies(dt) {
     const contact = f.r + e.r + 2;
 
     if (e.def.boss) {
+      const sp = e.speed * (e.slow > 0 ? 1 - e.slowAmt : 1);
+      if (e.def.carrier) {
+        const hold = e.def.holdRange * SCALE;
+        if (d > hold) {
+          e.x += (dx / d) * sp * dt;
+          e.y += (dy / d) * sp * dt;
+        } else {
+          e.x += (-dy / d) * sp * 0.4 * dt;
+          e.y += (dx / d) * sp * 0.4 * dt;
+          e.pulseCd -= dt;
+          if (e.pulseCd <= 0) {
+            e.pulseCd = e.def.pulseEvery;
+            for (let k = 0; k < 3; k++) {
+              spawnEnemy("tri", e.x + rand(-24, 24), e.y + rand(-24, 24));
+            }
+            addRing(e.x, e.y, e.def.color, 70, 3);
+            sfx.warn();
+          }
+        }
+        continue;
+      }
       if (d > contact + 14) {
-        const sp = e.speed * (e.slow > 0 ? 1 - e.slowAmt : 1);
         e.x += (dx / d) * sp * dt;
         e.y += (dy / d) * sp * dt;
       } else {
@@ -452,7 +506,7 @@ function updateEnemies(dt) {
         e.pulseCd -= dt;
         if (e.pulseCd <= 0) {
           e.pulseCd = e.def.pulseEvery;
-          const dmg = e.def.pulseDmg + G.wave * 2;
+          const dmg = Math.round((e.def.pulseDmg + G.wave * 2) * enemyDmgMul());
           damageFortress(dmg);
           addRing(e.x, e.y, e.def.color, 90, 5);
           addFloater(CX, CY - f.r - 16, `-${dmg}`, "#ff5d5d");
@@ -479,9 +533,10 @@ function updateEnemies(dt) {
           G.enemyShots.push({
             x: e.x, y: e.y,
             vx: Math.cos(a) * shotSpeed, vy: Math.sin(a) * shotSpeed,
-            dmg: Math.round(8 + G.wave * 0.8), life: 5,
+            dmg: Math.round((8 + G.wave * 0.8) * enemyDmgMul()), life: 5,
           });
           addRing(e.x, e.y, e.def.color, 22, 2);
+          sfx.snipe();
         }
       }
       continue;
@@ -495,8 +550,9 @@ function updateEnemies(dt) {
     e.y += ((dy / d) * sp + py * wobble * 0.4) * dt;
 
     if (d <= contact) {
-      damageFortress(e.def.dmg);
-      addFloater(CX, CY - f.r - 16, `-${e.def.dmg}`, "#ff5d5d");
+      const dmg = Math.round(e.def.dmg * enemyDmgMul());
+      damageFortress(dmg);
+      addFloater(CX, CY - f.r - 16, `-${dmg}`, "#ff5d5d");
       burst(e.x, e.y, e.def.color, 8, 3, 150);
       e.dead = true; // kamikaze: no energy reward
     }
@@ -569,6 +625,40 @@ function updateTurrets(dt) {
           }
         }
         G.beams.push({ x1: slot.x, y1: slot.y, x2: target.x, y2: target.y, color: def.color, level: t.level });
+        if (Math.random() < 0.35) {
+          G.particles.push({ x: target.x + rand(-4, 4), y: target.y + rand(-4, 4), vx: rand(-50, 50), vy: rand(-50, 50), r: 1.8, sides: 4, rot: rand(0, TAU), spin: 6, color: "#ffffff", life: 0.2 });
+        }
+      }
+      continue;
+    }
+
+    if (def.kind === "tesla") {
+      const target = nearestEnemy(slot.x, slot.y, s.range);
+      if (target) t.aim = Math.atan2(target.y - slot.y, target.x - slot.x);
+      if (target && t.cd <= 0) {
+        t.cd = 1 / s.rate;
+        const pts = [{ x: slot.x, y: slot.y }];
+        const hit = new Set();
+        let cur = target;
+        let dmg = s.dmg;
+        const jumps = def.chains + (t.level - 1);
+        for (let j = 0; j <= jumps && cur; j++) {
+          hit.add(cur);
+          pts.push({ x: cur.x, y: cur.y });
+          damageEnemy(cur, dmg);
+          burst(cur.x, cur.y, def.color, 3, 2, 90);
+          dmg *= 0.7;
+          let next = null;
+          let best = def.chainRange * SCALE;
+          for (const e of G.enemies) {
+            if (e.dead || hit.has(e)) continue;
+            const dd = dist(cur.x, cur.y, e.x, e.y);
+            if (dd < best) { best = dd; next = e; }
+          }
+          cur = next;
+        }
+        G.bolts.push({ pts, color: def.color, life: 0.18 });
+        sfx.zap();
       }
       continue;
     }
@@ -597,6 +687,7 @@ function updateTurrets(dt) {
           color: def.color, r: def.kind === "bullet" && def.splash ? 5 : 3,
           life: 2.2,
         });
+        burst(slot.x + Math.cos(a) * slot.r, slot.y + Math.sin(a) * slot.r, def.color, 2, 1.5, 70);
       }
       sfx.shoot();
     }
@@ -722,6 +813,9 @@ function updateFx(dt) {
   }
   G.rings = G.rings.filter(r => r.life > 0);
 
+  for (const b of G.bolts) b.life -= dt;
+  G.bolts = G.bolts.filter(b => b.life > 0);
+
   for (const fl of G.floaters) {
     fl.y -= 34 * dt;
     fl.life -= dt * 0.85;
@@ -744,6 +838,47 @@ function updateFx(dt) {
     m.y += m.vy * dt;
   }
   G.motes = G.motes.filter(m => !m.dead);
+}
+
+/* ---- ambient drifting shapes behind the menu ---- */
+let ambientTimer = 0;
+function updateAmbient(dt) {
+  ambientTimer -= dt;
+  if (ambientTimer <= 0 && G.ambient.length < 9) {
+    ambientTimer = rand(1.2, 2.6);
+    const def = ENEMY_TYPES[pick(["tri", "sq", "pent", "hex", "shoot"])];
+    const fromLeft = Math.random() < 0.5;
+    G.ambient.push({
+      def,
+      x: fromLeft ? -50 : W + 50,
+      y: rand(H * 0.08, H * 0.92),
+      vx: (fromLeft ? 1 : -1) * rand(14, 38),
+      vy: rand(-7, 7),
+      r: def.r * SCALE * rand(0.8, 1.7),
+      rot: rand(0, TAU),
+      spin: rand(-1.2, 1.2),
+    });
+  }
+  for (const a of G.ambient) {
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+    a.rot += a.spin * dt;
+  }
+  G.ambient = G.ambient.filter(a => a.x > -90 && a.x < W + 90);
+}
+
+function drawAmbient() {
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  for (const a of G.ambient) {
+    ctx.fillStyle = a.def.color;
+    ctx.shadowColor = a.def.color;
+    ctx.shadowBlur = 8;
+    poly(a.x, a.y, a.r, a.def.sides, a.rot);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 /* ============================== HUD ============================== */
@@ -788,9 +923,11 @@ function render() {
     ctx.translate(rand(-G.shake, G.shake) * 0.5, rand(-G.shake, G.shake) * 0.5);
   }
 
+  if (G.state === "menu" || G.state === "gameover") drawAmbient();
   drawSlots();
   drawRings();
   drawBeams();
+  drawBolts();
   drawFortress();
   drawTurrets();
   drawEnemies();
@@ -980,6 +1117,31 @@ function drawBeams() {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+function drawBolts() {
+  for (const b of G.bolts) {
+    ctx.save();
+    ctx.globalAlpha = clamp(b.life * 6, 0, 1);
+    ctx.strokeStyle = b.color;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < b.pts.length - 1; i++) {
+      const a = b.pts[i], c = b.pts[i + 1];
+      ctx.moveTo(a.x, a.y);
+      const segs = 4;
+      for (let si = 1; si <= segs; si++) {
+        const t = si / segs;
+        const jag = si < segs ? rand(-7, 7) : 0;
+        ctx.lineTo(lerp(a.x, c.x, t) + jag, lerp(a.y, c.y, t) + jag);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawProjectiles() {
@@ -1242,10 +1404,14 @@ function resetRun() {
   G.motes = [];
   G.spawnQueue = [];
   G.enemyShots = [];
+  G.bolts = [];
+  G.ambient = [];
+  G.hitStop = 0;
   G.fortress.maxHp = Math.round(500 * (1 + 0.1 * meta.hull));
   G.fortress.hp = G.fortress.maxHp;
   G.fortress.gunTarget = null;
   for (const s of G.slots) s.turret = null;
+  $("eliteTag").hidden = !elite;
   lastWaveShown = lastEnergyShown = lastHpShown = -1;
 }
 
@@ -1267,6 +1433,8 @@ function showMenu() {
       </div>
       ${G.highScore ? `<div class="subtitle" style="margin-top:16px">BEST SCORE — <b style="color:#fff">${G.highScore.toLocaleString()}</b></div>` : ""}
       <button class="big-btn" id="playBtn">DEPLOY</button>
+      <div><button class="ghost-btn" id="diffBtn" style="${elite ? "color:#ff3d6e;border-color:#ff3d6e" : ""}">DIFFICULTY: ${elite ? "ELITE" : "NORMAL"}</button></div>
+      ${elite ? `<div class="subtitle" style="margin-top:8px;color:#ff3d6e">Elite: enemies +50% HP, +40% damage &middot; score &amp; cores x1.5</div>` : ""}
       ${anyMeta ? `
       <div class="legend" style="margin-top:26px">${shapeIcon("hex", "#ffd23f")}
         <div style="font-size:14px;color:#dfe8ff;font-weight:800">CORES <span style="color:#ffd23f">${cores}</span></div>
@@ -1292,6 +1460,13 @@ function showMenu() {
     resetRun();
     beginIntermission(6);
     showHint("TAP A DASHED SLOT TO BUILD A TURRET", 5000);
+  });
+  $("diffBtn").addEventListener("click", () => {
+    ensureAudio();
+    elite = !elite;
+    localStorage.setItem("shapeDefense.elite", elite ? "1" : "0");
+    sfx.card();
+    showMenu();
   });
   overlayEl.querySelectorAll("[data-meta]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1365,7 +1540,7 @@ function gameOver() {
   addRing(CX, CY, "#ff5d5d", Math.max(W, H) * 0.4, 6);
   G.shake = 22;
   G.beams = [];
-  G.score = G.kills * 10 + Math.max(0, G.wave - 1) * 100;
+  G.score = Math.round((G.kills * 10 + Math.max(0, G.wave - 1) * 100) * (elite ? 1.5 : 1));
   const isBest = G.score > G.highScore;
   if (isBest) {
     G.highScore = G.score;
@@ -1428,7 +1603,12 @@ function frame(now) {
   lastT = now;
   dt = Math.min(dt, 0.1);
   if (G.state === "playing" || G.state === "intermission") {
-    acc += dt;
+    let gameDt = dt;
+    if (G.hitStop > 0) {
+      G.hitStop = Math.max(0, G.hitStop - dt);
+      gameDt = dt * 0.12;
+    }
+    acc += gameDt;
     let guard = 0;
     while (acc >= STEP && guard++ < 8) {
       update(STEP);
@@ -1436,6 +1616,7 @@ function frame(now) {
     }
   } else {
     G.time += dt;
+    if (G.state === "menu" || G.state === "gameover") updateAmbient(dt);
     updateFx(dt);
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 30);
   }

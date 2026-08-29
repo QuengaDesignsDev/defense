@@ -199,6 +199,7 @@
   .shape.dia i { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
   .shape.hex i { clip-path: polygon(25% 6.7%, 75% 6.7%, 100% 50%, 75% 93.3%, 25% 93.3%, 0% 50%); }
   .shape.pent i { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+  .shape.oct i { clip-path: polygon(29% 0%, 71% 0%, 100% 29%, 100% 71%, 71% 100%, 29% 100%, 0% 71%, 0% 29%); }
 
   /* ---------- overlays (menu / cards / game over / pause) ---------- */
   #overlay {
@@ -289,7 +290,7 @@
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <div class="hud-chip" id="hud-wave">WAVE <b id="waveNum">1</b></div>
+  <div class="hud-chip" id="hud-wave">WAVE <b id="waveNum">1</b><span id="eliteTag" style="color:#ff3d6e" hidden>ELITE</span></div>
   <div id="hpwrap"><div id="hpbar"><div id="hpfill"></div></div></div>
   <div class="hud-chip" id="hud-energy"><span class="gem"></span><span id="energyNum">0</span></div>
   <button class="icon-btn" id="muteBtn" aria-label="Mute"><span class="mute-glyph"></span></button>
