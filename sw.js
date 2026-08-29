@@ -3,15 +3,15 @@
  * stale-while-revalidate so the game works offline and updates
  * quietly in the background. Bump CACHE on every release. */
 
-const CACHE = "shape-defense-v1";
+const CACHE = "shape-defense-v2";
 const SHELL = [
   "./",
   "./index.html",
   "./game.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/maskable-512.png",
+  "./icons/icon-512.svg",
+  "./icons/maskable-512.svg",
   "./icons/apple-touch-icon.png",
 ];
 
