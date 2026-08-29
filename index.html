@@ -205,12 +205,14 @@
     position: fixed;
     inset: 0;
     display: none;
-    align-items: center;
+    align-items: safe center;
     justify-content: center;
     background: rgba(3, 6, 15, 0.72);
     backdrop-filter: blur(3px);
     z-index: 30;
     padding: 20px;
+    overflow-y: auto;
+    touch-action: pan-y;
   }
   .modal { text-align: center; max-width: 640px; width: 100%; }
   .title {

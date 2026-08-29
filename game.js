@@ -120,6 +120,7 @@ const ENEMY_TYPES = {
   sq:   { sides: 4, r: 13, hp: 36, speed: 46, dmg: 20, energy: 7,  color: "#ff9a3d" },
   pent: { sides: 5, r: 17, hp: 95, speed: 33, dmg: 34, energy: 13, color: "#d05cff" },
   hex:  { sides: 6, r: 15, hp: 62, speed: 52, dmg: 26, energy: 15, color: "#ffd23f", splits: 3 },
+  shoot:{ sides: 4, r: 12, hp: 55, speed: 42, dmg: 22, energy: 12, color: "#ff4d9b", shooter: true, shotEvery: 2.4, holdRange: 300 },
   boss: { sides: 8, r: 40, hp: 950, speed: 26, dmg: 0, energy: 170, color: "#ff3d6e", boss: true, pulseDmg: 55, pulseEvery: 2.0 },
 };
 
@@ -133,6 +134,22 @@ const PERKS = [
   { id: "velo",   name: "VELOCITY ROUNDS",cls: "pent", color: "#6dff8c", desc: "Projectile speed +30%, range +10%" },
   { id: "fort",   name: "FORTRESS GUNNERY", cls: "hex", color: "#fff06a", desc: "Fortress cannon damage +60%" },
 ];
+
+/* ---- permanent meta-progression (persists across runs) ---- */
+const META_UPGRADES = [
+  { id: "hull",  name: "HULL PLATING", desc: "+10% max hull per level",      cls: "hex",  color: "#8aa6ff", max: 5 },
+  { id: "dmg",   name: "DAMAGE AMP",   desc: "+5% turret damage per level",  cls: "tri",  color: "#ff6161", max: 5 },
+  { id: "react", name: "REACTOR",      desc: "+15 starting energy per level", cls: "dia",  color: "#35e0ff", max: 5 },
+  { id: "harv",  name: "HARVESTER",    desc: "+5% kill energy per level",    cls: "pent", color: "#6dff8c", max: 5 },
+];
+let meta = { hull: 0, dmg: 0, react: 0, harv: 0 };
+try { meta = { ...meta, ...JSON.parse(localStorage.getItem("shapeDefense.meta") || "{}") }; } catch (e) { /* fresh start */ }
+let cores = +(localStorage.getItem("shapeDefense.cores") || 0) || 0;
+const metaCost = level => Math.round(10 * Math.pow(1.7, level));
+function saveMeta() {
+  localStorage.setItem("shapeDefense.meta", JSON.stringify(meta));
+  localStorage.setItem("shapeDefense.cores", String(cores));
+}
 
 /* ============================== state ============================== */
 const G = {
@@ -156,6 +173,7 @@ const G = {
   rings: [],
   floaters: [],
   motes: [],
+  enemyShots: [],
   spawnQueue: [],
   spawnTimer: 0,
   spawnInterval: 1,
@@ -164,9 +182,9 @@ const G = {
 };
 
 const perkCount = id => G.perks[id] || 0;
-const dmgMul = () => 1 + 0.2 * perkCount("dmg");
+const dmgMul = () => (1 + 0.2 * perkCount("dmg")) * (1 + 0.05 * meta.dmg);
 const rateMul = () => 1 + 0.15 * perkCount("rate");
-const energyMul = () => 1 + 0.25 * perkCount("energy");
+const energyMul = () => (1 + 0.25 * perkCount("energy")) * (1 + 0.05 * meta.harv);
 const critChance = () => 0.1 * perkCount("crit");
 const projSpeedMul = () => 1 + 0.3 * perkCount("velo");
 const rangeMul = () => 1 + 0.1 * perkCount("velo");
@@ -241,6 +259,7 @@ function buildWave(wave) {
   if (wave >= 2) push("sq", Math.round((1 + wave) * density));
   if (wave >= 4) push("pent", Math.round(Math.floor(wave / 2) * density));
   if (wave >= 6) push("hex", Math.round(Math.floor(wave / 3) * density));
+  if (wave >= 7) push("shoot", Math.max(1, Math.round(Math.floor((wave - 5) / 2) * density)));
   shuffle(q);
   if (bossWave) q.push("boss");
   G.spawnQueue = q;
@@ -271,6 +290,7 @@ function spawnEnemy(type, x, y) {
     flash: 0,
     siege: false,
     pulseCd: def.pulseEvery || 0,
+    shotCd: def.shotEvery ? def.shotEvery * rand(0.5, 1.2) : 0,
   });
 }
 
@@ -287,6 +307,7 @@ function waveCleared() {
   G.energy += bonus;
   addFloater(CX, CY - G.fortress.r - 30, `+${bonus}`, "#35e0ff");
   G.beams = [];
+  G.enemyShots = [];
   sfx.waveClear();
   showCards();
 }
@@ -435,6 +456,32 @@ function updateEnemies(dt) {
           damageFortress(dmg);
           addRing(e.x, e.y, e.def.color, 90, 5);
           addFloater(CX, CY - f.r - 16, `-${dmg}`, "#ff5d5d");
+        }
+      }
+      continue;
+    }
+
+    if (e.def.shooter) {
+      const hold = e.def.holdRange * SCALE;
+      const sp = e.speed * (e.slow > 0 ? 1 - e.slowAmt : 1);
+      if (d > hold) {
+        e.x += (dx / d) * sp * dt;
+        e.y += (dy / d) * sp * dt;
+      } else {
+        // strafe slowly around the fortress while firing
+        e.x += (-dy / d) * sp * 0.35 * dt;
+        e.y += (dx / d) * sp * 0.35 * dt;
+        e.shotCd -= dt;
+        if (e.shotCd <= 0) {
+          e.shotCd = e.def.shotEvery * (e.slow > 0 ? 1.5 : 1);
+          const a = Math.atan2(CY - e.y, CX - e.x);
+          const shotSpeed = 150 * SCALE;
+          G.enemyShots.push({
+            x: e.x, y: e.y,
+            vx: Math.cos(a) * shotSpeed, vy: Math.sin(a) * shotSpeed,
+            dmg: Math.round(8 + G.wave * 0.8), life: 5,
+          });
+          addRing(e.x, e.y, e.def.color, 22, 2);
         }
       }
       continue;
@@ -642,6 +689,20 @@ function updateProjectiles(dt) {
     }
   }
   G.missiles = G.missiles.filter(m => !m.dead);
+
+  const f = G.fortress;
+  for (const s of G.enemyShots) {
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.life -= dt;
+    if (s.life <= 0) { s.dead = true; continue; }
+    if (dist(s.x, s.y, CX, CY) <= f.r) {
+      s.dead = true;
+      damageFortress(s.dmg);
+      addFloater(CX, CY - f.r - 16, `-${s.dmg}`, "#ff5d5d");
+    }
+  }
+  G.enemyShots = G.enemyShots.filter(s => !s.dead);
 }
 
 function updateFx(dt) {
@@ -942,6 +1003,13 @@ function drawProjectiles() {
     ctx.fill();
     ctx.restore();
   }
+  ctx.fillStyle = "#ff4d9b";
+  ctx.shadowColor = "#ff4d9b";
+  ctx.shadowBlur = 8;
+  for (const s of G.enemyShots) {
+    poly(s.x, s.y, 5, 4, 0);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1160,7 +1228,7 @@ function setState(next) {
 
 function resetRun() {
   G.wave = 0;
-  G.energy = 90;
+  G.energy = 90 + meta.react * 15;
   G.kills = 0;
   G.time = 0;
   G.perks = {};
@@ -1173,8 +1241,9 @@ function resetRun() {
   G.floaters = [];
   G.motes = [];
   G.spawnQueue = [];
-  G.fortress.maxHp = 500;
-  G.fortress.hp = 500;
+  G.enemyShots = [];
+  G.fortress.maxHp = Math.round(500 * (1 + 0.1 * meta.hull));
+  G.fortress.hp = G.fortress.maxHp;
   G.fortress.gunTarget = null;
   for (const s of G.slots) s.turret = null;
   lastWaveShown = lastEnergyShown = lastHpShown = -1;
@@ -1183,6 +1252,7 @@ function resetRun() {
 function showMenu() {
   setState("menu");
   overlayEl.style.display = "flex";
+  const anyMeta = cores > 0 || Object.values(meta).some(v => v > 0);
   overlayEl.innerHTML = `
     <div class="modal">
       <div class="title">SHAPE<br>DEFENSE<small>FORTRESS TD</small></div>
@@ -1193,15 +1263,49 @@ function showMenu() {
         <div>${shapeIcon("sq", "#ff9a3d")} GRUNT</div>
         <div>${shapeIcon("pent", "#d05cff")} TANK</div>
         <div>${shapeIcon("hex", "#ffd23f")} SPLITTER</div>
+        <div>${shapeIcon("dia", "#ff4d9b")} SNIPER</div>
       </div>
-      ${G.highScore ? `<div class="subtitle" style="margin-top:18px">BEST SCORE — <b style="color:#fff">${G.highScore.toLocaleString()}</b></div>` : ""}
+      ${G.highScore ? `<div class="subtitle" style="margin-top:16px">BEST SCORE — <b style="color:#fff">${G.highScore.toLocaleString()}</b></div>` : ""}
       <button class="big-btn" id="playBtn">DEPLOY</button>
+      ${anyMeta ? `
+      <div class="legend" style="margin-top:26px">${shapeIcon("hex", "#ffd23f")}
+        <div style="font-size:14px;color:#dfe8ff;font-weight:800">CORES <span style="color:#ffd23f">${cores}</span></div>
+      </div>
+      <div class="cards" style="margin-top:12px">
+        ${META_UPGRADES.map(u => {
+          const lvl = meta[u.id];
+          const maxed = lvl >= u.max;
+          const cost = metaCost(lvl);
+          const afford = !maxed && cores >= cost;
+          return `<button class="card" data-meta="${u.id}" style="width:132px;padding:14px 10px;${afford ? "" : "opacity:.55"}">
+            ${shapeIcon(u.cls, u.color)}
+            <b style="font-size:12px">${u.name}</b>
+            <span>${u.desc}</span>
+            <span style="color:${u.color};font-weight:800">LV ${lvl}/${u.max}</span>
+            <span style="color:#ffd23f;font-weight:800">${maxed ? "MAX" : cost + " CORES"}</span>
+          </button>`;
+        }).join("")}
+      </div>` : ""}
     </div>`;
   $("playBtn").addEventListener("click", () => {
     ensureAudio();
     resetRun();
     beginIntermission(6);
     showHint("TAP A DASHED SLOT TO BUILD A TURRET", 5000);
+  });
+  overlayEl.querySelectorAll("[data-meta]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      ensureAudio();
+      const u = META_UPGRADES.find(x => x.id === btn.dataset.meta);
+      const lvl = meta[u.id];
+      const cost = metaCost(lvl);
+      if (lvl >= u.max || cores < cost) { sfx.deny(); return; }
+      cores -= cost;
+      meta[u.id]++;
+      saveMeta();
+      sfx.upgrade();
+      showMenu();
+    });
   });
 }
 
@@ -1267,6 +1371,9 @@ function gameOver() {
     G.highScore = G.score;
     localStorage.setItem("shapeDefense.highScore", String(G.score));
   }
+  const coresEarned = Math.max(1, Math.round(G.score / 150));
+  cores += coresEarned;
+  saveMeta();
   setState("gameover");
   overlayEl.style.display = "flex";
   overlayEl.innerHTML = `
@@ -1278,7 +1385,9 @@ function gameOver() {
         <div class="stat">WAVE REACHED<b>${G.wave}</b></div>
         <div class="stat">KILLS<b>${G.kills.toLocaleString()}</b></div>
         <div class="stat">BEST<b>${G.highScore.toLocaleString()}</b></div>
+        <div class="stat">CORES EARNED<b style="color:#ffd23f">+${coresEarned}</b></div>
       </div>
+      <div class="subtitle">Spend cores on permanent upgrades in the main menu</div>
       <button class="big-btn" id="retryBtn">REDEPLOY</button><br>
       <button class="ghost-btn" id="menuBtn">MAIN MENU</button>
     </div>`;
