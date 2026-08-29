@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Shape Defense</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305070f'/%3E%3Cpolygon points='16,3 27.3,9.5 27.3,22.5 16,29 4.7,22.5 4.7,9.5' fill='none' stroke='%2335e0ff' stroke-width='2.5'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --cyan: #35e0ff;
+    --orange: #ffb03a;
+    --magenta: #ff53d4;
+    --frost: #8aa6ff;
+    --green: #6dff8c;
+    --red: #ff5d5d;
+    --ink: #05070f;
+    --panel: rgba(10, 16, 34, 0.92);
+    --line: rgba(120, 160, 255, 0.25);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    color: #dfe8ff;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #game { position: fixed; inset: 0; display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed;
+    top: env(safe-area-inset-top, 0);
+    left: 0; right: 0;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .hud-chip {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  #hud-wave { color: #9fb7ff; }
+  #hud-wave b { color: #fff; }
+  #hud-energy { color: var(--cyan); margin-left: auto; }
+  .gem {
+    width: 11px; height: 11px;
+    background: var(--cyan);
+    transform: rotate(45deg);
+    box-shadow: 0 0 8px var(--cyan);
+    flex: none;
+  }
+  #hpwrap { flex: 1 1 90px; min-width: 60px; max-width: 260px; pointer-events: none; }
+  #hpbar {
+    height: 10px;
+    border-radius: 6px;
+    background: rgba(255, 93, 93, 0.18);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  #hpfill {
+    height: 100%;
+    width: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #38ffb0, #35e0ff);
+    transition: width 0.15s linear;
+  }
+  .icon-btn {
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    width: 38px; height: 34px;
+    color: #9fb7ff;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn:active { transform: scale(0.94); }
+  .pause-glyph { display: flex; gap: 3px; }
+  .pause-glyph i { width: 4px; height: 12px; background: #9fb7ff; border-radius: 1px; }
+  .mute-glyph { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #9fb7ff; position: relative; }
+  .muted .mute-glyph::after {
+    content: ""; position: absolute; left: -4px; top: 4px;
+    width: 18px; height: 2px; background: var(--red); transform: rotate(-45deg);
+  }
+
+  /* ---------- bottom action bar (start wave / hint) ---------- */
+  #bottombar {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0) + 16px);
+    left: 0; right: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #hint {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: #8fa5d8;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 12px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #startWaveBtn {
+    pointer-events: auto;
+    display: none;
+    background: linear-gradient(180deg, #1a2c55, #101c3a);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    padding: 12px 26px;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 0 18px rgba(53, 224, 255, 0.25);
+  }
+  #startWaveBtn:active { transform: scale(0.96); }
+
+  /* ---------- build / upgrade panel ---------- */
+  #buildpanel {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px;
+    z-index: 20;
+    max-width: calc(100vw - 16px);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .build-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    min-width: 74px;
+    color: #dfe8ff;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  .build-btn:disabled { opacity: 0.35; cursor: default; }
+  .build-btn:not(:disabled):active { transform: scale(0.95); }
+  .build-btn .cost { color: var(--cyan); font-size: 12px; display: flex; align-items: center; gap: 4px; }
+  .build-btn .cost .gem { width: 8px; height: 8px; }
+  .build-btn.sell { justify-content: center; color: var(--red); }
+  .build-btn.sell .cost { color: var(--red); }
+  .build-btn.sell .gem { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .shape { width: 22px; height: 22px; position: relative; flex: none; filter: drop-shadow(0 0 5px currentColor); }
+  .shape i { position: absolute; inset: 0; background: currentColor; }
+  .shape.tri i { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+  .shape.sq i { clip-path: polygon(12% 12%, 88% 12%, 88% 88%, 12% 88%); }
+  .shape.dia i { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+  .shape.hex i { clip-path: polygon(25% 6.7%, 75% 6.7%, 100% 50%, 75% 93.3%, 25% 93.3%, 0% 50%); }
+  .shape.pent i { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+
+  /* ---------- overlays (menu / cards / game over / pause) ---------- */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(3, 6, 15, 0.72);
+    backdrop-filter: blur(3px);
+    z-index: 30;
+    padding: 20px;
+  }
+  .modal { text-align: center; max-width: 640px; width: 100%; }
+  .title {
+    font-size: clamp(34px, 8vw, 58px);
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    color: #fff;
+    text-shadow: 0 0 24px rgba(53, 224, 255, 0.8);
+  }
+  .title small { display: block; font-size: clamp(13px, 3vw, 17px); font-weight: 700; letter-spacing: 0.5em; color: var(--cyan); margin-top: 6px; }
+  .subtitle { margin-top: 14px; color: #8fa5d8; font-size: 14px; letter-spacing: 0.06em; line-height: 1.7; }
+  .big-btn {
+    margin-top: 26px;
+    background: linear-gradient(180deg, #16407a, #0d2450);
+    border: 1px solid var(--cyan);
+    color: #fff;
+    font: inherit;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    padding: 15px 46px;
+    border-radius: 14px;
+    cursor: pointer;
+    box-shadow: 0 0 26px rgba(53, 224, 255, 0.35);
+  }
+  .big-btn:active { transform: scale(0.96); }
+  .ghost-btn {
+    margin-top: 14px;
+    display: inline-block;
+    background: none;
+    border: 1px solid var(--line);
+    color: #8fa5d8;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 10px 22px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .stat-row { display: flex; justify-content: center; gap: 26px; margin-top: 20px; flex-wrap: wrap; }
+  .stat { font-size: 13px; letter-spacing: 0.1em; color: #8fa5d8; }
+  .stat b { display: block; font-size: 26px; color: #fff; margin-top: 4px; }
+  .cards { display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    width: 150px;
+    padding: 18px 12px;
+    cursor: pointer;
+    font: inherit;
+    color: #dfe8ff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+  }
+  .card:hover, .card:active {
+    transform: translateY(-4px);
+    border-color: var(--cyan);
+    box-shadow: 0 0 22px rgba(53, 224, 255, 0.3);
+  }
+  .card .shape { width: 30px; height: 30px; }
+  .card b { font-size: 14px; letter-spacing: 0.05em; }
+  .card span { font-size: 12px; color: #8fa5d8; line-height: 1.5; }
+  .legend { display: flex; gap: 18px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
+  .legend div { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #8fa5d8; letter-spacing: 0.05em; }
+  .legend .shape { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="hud-chip" id="hud-wave">WAVE <b id="waveNum">1</b></div>
+  <div id="hpwrap"><div id="hpbar"><div id="hpfill"></div></div></div>
+  <div class="hud-chip" id="hud-energy"><span class="gem"></span><span id="energyNum">0</span></div>
+  <button class="icon-btn" id="muteBtn" aria-label="Mute"><span class="mute-glyph"></span></button>
+  <button class="icon-btn" id="pauseBtn" aria-label="Pause"><span class="pause-glyph"><i></i><i></i></span></button>
+</div>
+
+<div id="bottombar">
+  <div id="hint"></div>
+  <button id="startWaveBtn"></button>
+</div>
+
+<div id="buildpanel"></div>
+<div id="overlay"></div>
+
+<script src="game.js"></script>
+</body>
+</html>
