@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Shape Defense</title>
+<meta name="description" content="A shapes-only fortress tower defense game. Build turrets, pick upgrades, survive endless waves.">
+<meta name="theme-color" content="#05070f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shape Defense">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305070f'/%3E%3Cpolygon points='16,3 27.3,9.5 27.3,22.5 16,29 4.7,22.5 4.7,9.5' fill='none' stroke='%2335e0ff' stroke-width='2.5'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -295,5 +303,12 @@
 <div id="overlay"></div>
 
 <script src="game.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => { /* offline support is optional */ });
+    });
+  }
+</script>
 </body>
 </html>
