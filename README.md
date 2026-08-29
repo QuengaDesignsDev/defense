@@ -4,7 +4,13 @@ A shapes-only browser remake of the fortress tower-defense genre (inspired by
 *Galaxy Defense: Fortress TD*). Everything on screen is a geometric primitive —
 no sprites, no images, no dependencies.
 
-## Play
+**Play it live:** https://defensive.quengadesigns.dev (Vercel fallback:
+https://defensive-lovat.vercel.app)
+
+It is an installable PWA: after one visit it works fully offline, and
+"Add to Home Screen" gives a fullscreen standalone app on iOS and Android.
+
+## Play locally
 
 Open `index.html` in a browser, or serve the folder:
 
@@ -23,6 +29,9 @@ Works with mouse and touch (mobile-friendly).
 - After each wave, pick one of three **system upgrade** cards — they stack for the whole run.
 - Every 5th wave brings a **boss** that lays siege to the fortress.
 - Waves are endless and keep scaling; your best score is saved locally.
+- Each run awards **cores** (score ÷ 150). Spend them in the main menu on
+  permanent upgrades — hull plating, damage amp, reactor, harvester — that
+  apply to every future run.
 
 ### Turrets
 
@@ -42,6 +51,7 @@ Works with mouse and touch (mobile-friendly).
 | Grunt | square | standard attacker |
 | Tank | pentagon | slow and beefy |
 | Splitter | hexagon | splits into swarm triangles on death |
+| Sniper | pink diamond | from wave 7: holds at range and fires at the fortress |
 | Boss | octagon | every 5th wave; sieges the fortress with damage pulses |
 
 Keyboard shortcuts: `P`/`Esc` pause, `Space` starts the next wave early (+15 energy rush bonus).
