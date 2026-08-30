@@ -1,0 +1,19 @@
+{
+  "name": "Shape Defense",
+  "short_name": "Shape Defense",
+  "description": "A shapes-only fortress tower defense game. Build turrets, pick upgrades, survive endless waves.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#05070f",
+  "theme_color": "#05070f",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.svg", "sizes": "512x512 any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/maskable-512.svg", "sizes": "512x512 any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
