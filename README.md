@@ -23,12 +23,18 @@ Works with mouse and touch (mobile-friendly).
 
 ## How to play
 
-- Defend the hexagon **fortress** at the center. When its hull hits zero, the run ends.
-- Tap a dashed **slot** in the ring to build a turret; tap a built turret to upgrade (3 levels) or sell.
-- Kills and wave clears earn **energy** (the cyan diamonds) to spend on turrets.
-- After each wave, pick one of three **system upgrade** cards — they stack for the whole run.
-- Every 5th wave brings a **boss** that lays siege to the fortress.
-- Waves are endless and keep scaling; your best score is saved locally.
+- Meteors and alien shapes rain from the sky toward your **base** at the bottom
+  of the screen. When its hull (3200) hits zero, the run ends.
+- Your **gunner auto-fires** glowing tracers at the lowest threat — you manage
+  everything around him.
+- Tap a dashed **ground socket** to build a turret; tap a built turret to
+  upgrade (3 levels) or sell. Kills earn **energy** (cyan diamonds) to spend.
+- Kills also grant **XP**. Each level-up pauses the fight to offer one of three
+  **upgrade cards** (damage, fire rate, split fire, repair, hull, crit, and more)
+  that stack for the run.
+- Survive each **stage's timer**; stages scale endlessly. Every 5th stage a
+  **boss** descends — a volley-firing siege boss, or a Carrier that releases
+  swarms on the 10s. A **speed toggle** (x1/x2) keeps things moving.
 - Each run awards **cores** (score ÷ 150). Spend them in the main menu on
   permanent upgrades — hull plating, damage amp, reactor, harvester — that
   apply to every future run.
@@ -50,12 +56,13 @@ Works with mouse and touch (mobile-friendly).
 
 | Enemy | Shape | Behavior |
 | --- | --- | --- |
-| Swarm | triangle | fast, weak, comes in numbers |
-| Grunt | square | standard attacker |
-| Tank | pentagon | slow and beefy |
-| Splitter | hexagon | splits into swarm triangles on death |
-| Sniper | pink diamond | from wave 7: holds at range and fires at the fortress |
-| Boss | octagon | waves 5, 15, 25…; sieges the fortress with damage pulses |
-| Carrier | purple decagon | waves 10, 20, 30…; circles at range releasing swarms |
+| Meteor | flaming heptagon | falls straight, heavy impact damage |
+| Zigzag | orange triangle | fast, bounces side to side |
+| Blob | red pentagon | drifts down with a wobble, hits hard |
+| Splitter | yellow hexagon | breaks into shards partway down |
+| Tank | purple pentagon | slow, huge, devastating on impact |
+| Sniper | pink diamond | stops mid-air and fires at the base |
+| Boss | red octagon | stages 5, 15, 25…; descends and fires volleys |
+| Carrier | purple decagon | stages 10, 20, 30…; hovers, releasing zigzag swarms |
 
-Keyboard shortcuts: `P`/`Esc` pause, `Space` starts the next wave early (+15 energy rush bonus).
+Keyboard shortcuts: `P`/`Esc` pause, `S` toggles game speed.

@@ -45,10 +45,33 @@
     left: 0; right: 0;
     display: none;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
     pointer-events: none;
     z-index: 10;
+  }
+  #hud-stage { flex: 1; justify-content: center; color: #9fb7ff; min-width: 90px; }
+  #hud-stage b { color: #fff; }
+  #hud-timer { color: #dfe8ff; font-variant-numeric: tabular-nums; }
+  #speedBtn { font-size: 13px; color: var(--cyan); letter-spacing: 0.04em; }
+  #xpwrap { flex-basis: 100%; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  #lvlTag { color: #9fb7ff; padding: 3px 10px; font-size: 12px; }
+  #lvlTag b { color: #fff; }
+  #xpbar {
+    flex: 1;
+    height: 8px;
+    border-radius: 5px;
+    background: rgba(120, 160, 255, 0.14);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  #xpfill {
+    height: 100%;
+    width: 0%;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #35e0ff, #6dff8c);
+    transition: width 0.15s linear;
   }
   .hud-chip {
     background: var(--panel);
@@ -290,16 +313,21 @@
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <div class="hud-chip" id="hud-wave">WAVE <b id="waveNum">1</b><span id="eliteTag" style="color:#ff3d6e" hidden>ELITE</span></div>
-  <div id="hpwrap"><div id="hpbar"><div id="hpfill"></div></div></div>
+  <button class="icon-btn" id="pauseBtn" aria-label="Pause"><span class="pause-glyph"><i></i><i></i></span></button>
+  <button class="icon-btn" id="speedBtn" aria-label="Game speed">x1</button>
+  <div class="hud-chip" id="hud-stage">STAGE <b id="stageNum">1</b><span id="eliteTag" style="color:#ff3d6e" hidden>ELITE</span></div>
+  <div class="hud-chip" id="hud-timer"><span id="timerNum">00:00</span></div>
   <div class="hud-chip" id="hud-energy"><span class="gem"></span><span id="energyNum">0</span></div>
   <button class="icon-btn" id="muteBtn" aria-label="Mute"><span class="mute-glyph"></span></button>
-  <button class="icon-btn" id="pauseBtn" aria-label="Pause"><span class="pause-glyph"><i></i><i></i></span></button>
+  <div id="xpwrap">
+    <div class="hud-chip" id="lvlTag">LV <b id="lvlNum">1</b></div>
+    <div id="xpbar"><div id="xpfill"></div></div>
+  </div>
 </div>
 
 <div id="bottombar">
   <div id="hint"></div>
-  <button id="startWaveBtn"></button>
+  <button id="startWaveBtn" hidden></button>
 </div>
 
 <div id="buildpanel"></div>
