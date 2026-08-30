@@ -399,6 +399,36 @@
   }
   .battle-btn:active { transform: scale(0.97); }
   .battle-cost { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #6ef0dd; white-space: nowrap; }
+
+  /* ---------- turret lab ---------- */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; text-align: center; }
+  .stat-cell {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #8fa5d8;
+  }
+  .stat-cell b { display: block; font-size: 17px; color: #fff; margin-top: 3px; letter-spacing: 0.02em; }
+  .miles { margin-top: 14px; max-height: 200px; overflow-y: auto; }
+  .mile {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; margin-top: 6px;
+    font-size: 12px; color: #8fa5d8; text-align: left;
+  }
+  .mile b { color: #9fb7ff; flex: none; }
+  .mile.done { border-color: rgba(56, 255, 176, 0.45); color: #bfe8d8; }
+  .mile.done b { color: #38ffb0; }
+  .mile .cardname { color: #ffd23f; font-weight: 700; }
+  .lab-upg {
+    margin-top: 18px;
+    background: linear-gradient(180deg, #ffd94d, #d9a91f);
+    border: none; border-radius: 12px;
+    padding: 13px 40px;
+    font: inherit; font-size: 16px; font-weight: 900; letter-spacing: 0.12em;
+    color: #201703; cursor: pointer;
+    box-shadow: 0 0 22px rgba(255, 210, 63, 0.35);
+  }
+  .lab-upg:disabled { filter: grayscale(0.8); opacity: 0.5; cursor: default; }
+  .lab-upg:active:not(:disabled) { transform: scale(0.96); }
 </style>
 </head>
 <body>

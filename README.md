@@ -42,7 +42,14 @@ Works with mouse and touch (mobile-friendly).
   (enemies +50% HP and +40% damage, score and cores ×1.5).
 - The **home screen** shows your besieged planet: pick a starting stage with
   the side arrows (unlocked by clearing stages; later starts grant bonus
-  energy), and open the Upgrades shop or the Intel briefing from the tiles.
+  energy), and open the Turret Lab or Upgrades shop from the tiles.
+- The **Turret Lab**: every turret has a persistent level (1–10) upgraded with
+  cores. Each level gives that turret +8% damage and +2% global crit damage,
+  with milestones at Lv3/5/7/10 (range, fire rate, special effect, damage) —
+  and Lv2/Lv5 unlock that turret's **signature battle cards** (star-tier
+  cards like Double Tap, Napalm, Split Beam, Superconductor) that join the
+  level-up card pool when the turret is built. Turrets themselves unlock by
+  clearing stages: Frost at 2, Laser at 4, Missile at 6, Tesla at 8.
 
 ### Turrets
 

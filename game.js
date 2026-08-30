@@ -198,6 +198,56 @@ const enemyDmgMul = () => (elite ? 1.4 : 1);
 let bestCleared = +(localStorage.getItem("shapeDefense.bestStage") || 0) || 0;
 let menuStage = bestCleared + 1;
 
+/* ---- persistent turret levels (Turret Lab) ---- */
+const TURRET_MAX_LV = 10;
+const TURRET_GATES = { blaster: 0, cannon: 0, frost: 2, laser: 4, missile: 6, tesla: 8 };
+let turretMeta = { blaster: 1, cannon: 1, frost: 1, laser: 1, missile: 1, tesla: 1 };
+try { turretMeta = { ...turretMeta, ...JSON.parse(localStorage.getItem("shapeDefense.turrets") || "{}") }; } catch (e) { /* fresh start */ }
+const saveTurretMeta = () => localStorage.setItem("shapeDefense.turrets", JSON.stringify(turretMeta));
+const turretLv = key => turretMeta[key] || 1;
+const turretUnlocked = key => bestCleared >= TURRET_GATES[key];
+const turretUpgradeCost = lv => Math.round(12 * Math.pow(1.35, lv - 1));
+const totalTurretUpgrades = () => TURRET_ORDER.reduce((s, k) => s + (turretLv(k) - 1), 0);
+const critDmg = () => 2.5 + 0.02 * totalTurretUpgrades();
+function turretLabMul(key) {
+  const lv = turretLv(key);
+  return {
+    dmg: (1 + 0.08 * (lv - 1)) * (lv >= 10 ? 1.2 : 1),
+    range: lv >= 3 ? 1.1 : 1,
+    rate: lv >= 5 ? 1.1 : 1,
+    special: lv >= 7 ? 1.2 : 1,
+  };
+}
+
+/* per-turret battle cards, unlocked by turret lab level (star 1 at Lv2, star 2 at Lv5) */
+const SIGNATURE_CARDS = {
+  blaster: [
+    { id: "blaster1", star: 1, name: "DOUBLE TAP", desc: "Blasters fire +1 projectile" },
+    { id: "blaster2", star: 2, name: "OVERCHARGE", desc: "Blaster damage +50%" },
+  ],
+  cannon: [
+    { id: "cannon1", star: 1, name: "WIDE PAYLOAD", desc: "Cannon splash radius +35%" },
+    { id: "cannon2", star: 2, name: "NAPALM", desc: "Cannon explosions set enemies on fire" },
+  ],
+  frost: [
+    { id: "frost1", star: 1, name: "DEEP FREEZE", desc: "Frost slow 12% stronger" },
+    { id: "frost2", star: 2, name: "SHATTER", desc: "Slowed enemies take +25% damage" },
+  ],
+  laser: [
+    { id: "laser1", star: 1, name: "FOCUS", desc: "Beams ramp up damage on one target (max 2x)" },
+    { id: "laser2", star: 2, name: "SPLIT BEAM", desc: "Lasers hit a second target" },
+  ],
+  missile: [
+    { id: "missile1", star: 1, name: "CLUSTER", desc: "Missile splash +40%" },
+    { id: "missile2", star: 2, name: "TWIN LAUNCH", desc: "Missile turrets fire 2 missiles" },
+  ],
+  tesla: [
+    { id: "tesla1", star: 1, name: "SUPERCONDUCTOR", desc: "Tesla chains +2 jumps" },
+    { id: "tesla2", star: 2, name: "STATIC FIELD", desc: "Tesla chains slow enemies" },
+  ],
+};
+const sigUnlockLv = star => (star === 1 ? 2 : 5);
+
 /* ============================== state ============================== */
 const G = {
   state: "menu", // menu | playing | picking | paused | gameover
@@ -527,6 +577,20 @@ function updateEnemies(dt) {
     e.rot += e.spin * dt;
     e.flash = Math.max(0, e.flash - dt);
     if (e.slow > 0) e.slow -= dt;
+    if (e.burn && e.burn.t > 0) {
+      e.burn.t -= dt;
+      e.hp -= e.burn.dps * dt;
+      if (Math.random() < 0.25) {
+        G.particles.push({
+          x: e.x + rand(-e.r, e.r), y: e.y + rand(-e.r, e.r),
+          vx: rand(-15, 15), vy: rand(-50, -20),
+          r: rand(1.5, 3.5), sides: randInt(3, 5),
+          rot: rand(0, TAU), spin: rand(-6, 6),
+          color: pick(["#ff9a3d", "#ffd23f"]), life: rand(0.2, 0.4),
+        });
+      }
+      if (e.hp <= 0 && !e.dead) { killEnemy(e); continue; }
+    }
     const slowMul = e.slow > 0 ? 1 - e.slowAmt : 1;
     const def = e.def;
 
@@ -658,9 +722,10 @@ function damageEnemy(e, amt, canCrit = true) {
   if (e.dead) return;
   let crit = false;
   if (canCrit && Math.random() < critChance()) {
-    amt *= 2.5;
+    amt *= critDmg();
     crit = true;
   }
+  if (e.slow > 0 && perkCount("frost2")) amt *= 1.25;
   e.hp -= amt;
   e.flash = 0.08;
   addFloater(e.x + rand(-6, 6), e.y - e.r - 8, `-${Math.round(amt)}`, crit ? "#ffd23f" : "#dfe8ff");
@@ -773,17 +838,22 @@ function updateHero(dt) {
 function turretStats(t) {
   const def = TURRET_TYPES[t.type];
   const mul = levelMul(t.level);
+  const lab = turretLabMul(t.type);
+  const key = t.type;
+  const dmgBase = mul * dmgMul() * lab.dmg;
   return {
-    dmg: (def.dmg || 0) * mul * dmgMul(),
-    dps: (def.dps || 0) * mul * dmgMul(),
-    pulseDmg: (def.pulseDmg || 0) * mul * dmgMul(),
-    rate: (def.rate || 0) * Math.pow(1.12, t.level - 1) * rateMul(),
-    range: def.range * (1 + 0.12 * (t.level - 1)) * rangeMul() * SCALE,
+    dmg: (def.dmg || 0) * dmgBase * (key === "blaster" ? 1 + 0.5 * perkCount("blaster2") : 1),
+    dps: (def.dps || 0) * dmgBase * (key === "laser" ? lab.special : 1),
+    pulseDmg: (def.pulseDmg || 0) * dmgBase,
+    rate: (def.rate || 0) * Math.pow(1.12, t.level - 1) * rateMul() * lab.rate,
+    range: def.range * (1 + 0.12 * (t.level - 1)) * rangeMul() * lab.range * SCALE,
     speed: (def.speed || 0) * projSpeedMul() * SCALE,
-    splash: (def.splash || 0) * SCALE,
-    slow: def.slow ? Math.min(0.8, def.slow + 0.06 * (t.level - 1)) : 0,
+    splash: (def.splash || 0) * SCALE * lab.special
+      * (key === "cannon" ? 1 + 0.35 * perkCount("cannon1") : 1)
+      * (key === "missile" ? 1 + 0.4 * perkCount("missile1") : 1),
+    slow: def.slow ? Math.min(0.85, (def.slow + 0.06 * (t.level - 1) + 0.12 * perkCount("frost1")) * lab.special) : 0,
     slowDur: def.slowDur || 0,
-    pulse: def.pulse ? def.pulse / (Math.pow(1.12, t.level - 1) * rateMul()) : 0,
+    pulse: def.pulse ? def.pulse / (Math.pow(1.12, t.level - 1) * rateMul() * lab.rate) : 0,
   };
 }
 
@@ -819,24 +889,39 @@ function updateTurrets(dt) {
       let target = t.target;
       if (!target || target.dead || dist(mount.x, mount.y, target.x, target.y) - target.r > s.range) {
         target = t.target = nearestEnemy(mount.x, mount.y, s.range);
+        t.ramp = 0;
       }
       if (target) {
+        if (perkCount("laser1")) t.ramp = Math.min(1, (t.ramp || 0) + 0.1 * dt);
+        const dps = s.dps * (1 + (t.ramp || 0));
         t.aim = Math.atan2(target.y - mount.y, target.x - mount.x);
-        const bx = target.x - mount.x, by = target.y - mount.y;
-        const blen = Math.hypot(bx, by) || 1;
-        for (const e of G.enemies) {
-          if (e.dead) continue;
-          const ex = e.x - mount.x, ey = e.y - mount.y;
-          const proj = clamp((ex * bx + ey * by) / (blen * blen), 0, 1);
-          if (Math.hypot(ex - bx * proj, ey - by * proj) <= e.r + 5) {
-            e.hp -= s.dps * dt;
-            e.flash = 0.06;
-            if (e.hp <= 0 && !e.dead) killEnemy(e);
+        const targets = [target];
+        if (perkCount("laser2")) {
+          let second = null, best = s.range;
+          for (const e of G.enemies) {
+            if (e.dead || e === target || e.y < -10) continue;
+            const d = dist(mount.x, mount.y, e.x, e.y) - e.r;
+            if (d < best) { best = d; second = e; }
           }
+          if (second) targets.push(second);
         }
-        G.beams.push({ x1: mount.x, y1: mount.y - 10, x2: target.x, y2: target.y, color: def.color, level: t.level });
-        if (Math.random() < 0.35) {
-          G.particles.push({ x: target.x + rand(-4, 4), y: target.y + rand(-4, 4), vx: rand(-50, 50), vy: rand(-50, 50), r: 1.8, sides: 4, rot: rand(0, TAU), spin: 6, color: "#ffffff", life: 0.2 });
+        for (const tg of targets) {
+          const bx = tg.x - mount.x, by = tg.y - mount.y;
+          const blen = Math.hypot(bx, by) || 1;
+          for (const e of G.enemies) {
+            if (e.dead) continue;
+            const ex = e.x - mount.x, ey = e.y - mount.y;
+            const proj = clamp((ex * bx + ey * by) / (blen * blen), 0, 1);
+            if (Math.hypot(ex - bx * proj, ey - by * proj) <= e.r + 5) {
+              e.hp -= dps * dt;
+              e.flash = 0.06;
+              if (e.hp <= 0 && !e.dead) killEnemy(e);
+            }
+          }
+          G.beams.push({ x1: mount.x, y1: mount.y - 10, x2: tg.x, y2: tg.y, color: def.color, level: t.level });
+          if (Math.random() < 0.35) {
+            G.particles.push({ x: tg.x + rand(-4, 4), y: tg.y + rand(-4, 4), vx: rand(-50, 50), vy: rand(-50, 50), r: 1.8, sides: 4, rot: rand(0, TAU), spin: 6, color: "#ffffff", life: 0.2 });
+          }
         }
       }
       continue;
@@ -851,11 +936,17 @@ function updateTurrets(dt) {
         const hit = new Set();
         let cur = target;
         let dmg = s.dmg;
-        const jumps = def.chains + (t.level - 1);
+        const jumps = def.chains + (t.level - 1)
+          + (turretLabMul("tesla").special > 1 ? 1 : 0)
+          + 2 * perkCount("tesla1");
         for (let j = 0; j <= jumps && cur; j++) {
           hit.add(cur);
           pts.push({ x: cur.x, y: cur.y });
           damageEnemy(cur, dmg);
+          if (perkCount("tesla2")) {
+            cur.slow = Math.max(cur.slow || 0, 1);
+            cur.slowAmt = Math.max(cur.slowAmt || 0, 0.3);
+          }
           burst(cur.x, cur.y, def.color, 3, 2, 90);
           dmg *= 0.7;
           let next = null;
@@ -881,37 +972,47 @@ function updateTurrets(dt) {
     if (target && t.cd <= 0) {
       t.cd = 1 / s.rate;
       if (def.kind === "missile") {
-        G.missiles.push({
-          x: mount.x, y: mount.y - 10,
-          angle: t.aim + rand(-0.5, 0.5),
-          speed: s.speed, turn: def.turn,
-          dmg: s.dmg, splash: s.splash,
-          target, color: def.color, life: 6,
-        });
+        const salvo = 1 + perkCount("missile2");
+        for (let i = 0; i < salvo; i++) {
+          G.missiles.push({
+            x: mount.x, y: mount.y - 10,
+            angle: t.aim + rand(-0.5, 0.5),
+            speed: s.speed, turn: def.turn,
+            dmg: s.dmg, splash: s.splash,
+            target, color: def.color, life: 6,
+          });
+        }
       } else {
-        const a = t.aim;
-        G.bullets.push({
-          x: mount.x + Math.cos(a) * mount.r, y: mount.y - 10 + Math.sin(a) * mount.r,
-          vx: Math.cos(a) * s.speed, vy: Math.sin(a) * s.speed,
-          dmg: s.dmg, splash: s.splash,
-          color: def.color, r: def.splash ? 5 : 3,
-          life: 2.2,
-        });
-        burst(mount.x + Math.cos(a) * mount.r, mount.y - 10 + Math.sin(a) * mount.r, def.color, 2, 1.5, 70);
+        const shots = 1 + (t.type === "blaster" ? perkCount("blaster1") : 0);
+        for (let i = 0; i < shots; i++) {
+          const a = t.aim + (i - (shots - 1) / 2) * 0.12;
+          G.bullets.push({
+            x: mount.x + Math.cos(a) * mount.r, y: mount.y - 10 + Math.sin(a) * mount.r,
+            vx: Math.cos(a) * s.speed, vy: Math.sin(a) * s.speed,
+            dmg: s.dmg, splash: s.splash,
+            color: def.color, r: def.splash ? 5 : 3,
+            life: 2.2,
+            burn: t.type === "cannon" && perkCount("cannon2") > 0,
+          });
+        }
+        burst(mount.x + Math.cos(t.aim) * mount.r, mount.y - 10 + Math.sin(t.aim) * mount.r, def.color, 2, 1.5, 70);
       }
       sfx.shoot();
     }
   }
 }
 
-function explodeAt(x, y, dmg, splash, color) {
+function explodeAt(x, y, dmg, splash, color, burn = false) {
   if (splash > 0) {
     for (const e of G.enemies) {
       if (e.dead) continue;
       const d = dist(x, y, e.x, e.y) - e.r;
-      if (d <= splash) damageEnemy(e, dmg * (d <= 0 ? 1 : 1 - (d / splash) * 0.5));
+      if (d <= splash) {
+        damageEnemy(e, dmg * (d <= 0 ? 1 : 1 - (d / splash) * 0.5));
+        if (burn && !e.dead) e.burn = { dps: Math.max(e.burn ? e.burn.dps : 0, dmg * 0.15), t: 3 };
+      }
     }
-    addRing(x, y, color, splash, 2);
+    addRing(x, y, burn ? "#ff9a3d" : color, splash, 2);
     burst(x, y, color, 8, 3, 140);
   }
 }
@@ -926,7 +1027,7 @@ function updateProjectiles(dt) {
       if (e.dead || e.y < -10) continue;
       if (dist(b.x, b.y, e.x, e.y) <= e.r + b.r) {
         b.dead = true;
-        if (b.splash) explodeAt(b.x, b.y, b.dmg, b.splash, b.color);
+        if (b.splash) explodeAt(b.x, b.y, b.dmg, b.splash, b.color, b.burn);
         else { damageEnemy(e, b.dmg); burst(b.x, b.y, b.color, 3, 2, 90); }
         break;
       }
@@ -1545,6 +1646,7 @@ function openPanelForMount(i) {
 
   if (!mount.turret) {
     for (const key of TURRET_ORDER) {
+      if (!turretUnlocked(key)) continue;
       const def = TURRET_TYPES[key];
       const btn = document.createElement("button");
       btn.className = "build-btn";
@@ -1754,12 +1856,12 @@ function showMenu() {
       <div class="home-bottom">
         <div class="task-chip">CLEAR ${diff} STAGE ${menuStage}<br><b style="color:${cleared ? "#38ffb0" : "#ff5d5d"}">${cleared ? 1 : 0}/1</b></div>
         <div class="home-actions">
-          <button class="tile" id="shopTile">${shapeIcon("hex", "#ffd23f")}UPGRADES</button>
+          <button class="tile" id="labTile">${shapeIcon("tri", "#35e0ff")}TURRETS</button>
           <div style="flex:1">
             <button class="battle-btn" id="playBtn">BATTLE</button>
             <div class="battle-cost">${shapeIcon("dia", "#35e0ff", "width:10px;height:10px")} STAGE ${menuStage}${menuStage > 1 ? ` &middot; +${(menuStage - 1) * 30} ENERGY` : ""}</div>
           </div>
-          <button class="tile" id="intelTile">${shapeIcon("tri", "#ff6161")}INTEL</button>
+          <button class="tile" id="shopTile">${shapeIcon("hex", "#ffd23f")}UPGRADES</button>
         </div>
       </div>
     </div>
@@ -1787,10 +1889,111 @@ function showMenu() {
     ensureAudio();
     if (menuStage < bestCleared + 1) { menuStage++; sfx.build(); showMenu(); }
   });
+  $("labTile").addEventListener("click", showLab);
   $("shopTile").addEventListener("click", showShop);
   $("coresChip").addEventListener("click", showShop);
   $("bestChip").addEventListener("click", showIntel);
-  $("intelTile").addEventListener("click", showIntel);
+}
+
+function showLab() {
+  setState("menu");
+  overlayEl.style.display = "flex";
+  overlayEl.innerHTML = `
+    <div class="modal">
+      <div class="title" style="font-size:clamp(24px,6vw,36px)">TURRETS</div>
+      <div class="subtitle">TOTAL CRIT DMG <b style="color:#ffd23f">+${totalTurretUpgrades() * 2}%</b> &mdash; upgrade turrets to boost it</div>
+      <div class="legend" style="margin-top:10px">${shapeIcon("hex", "#ffd23f")}
+        <div style="font-size:14px;color:#dfe8ff;font-weight:800">CORES <span style="color:#ffd23f">${cores}</span></div>
+      </div>
+      <div class="cards" style="margin-top:14px">
+        ${TURRET_ORDER.map(key => {
+          const def = TURRET_TYPES[key];
+          const unlocked = turretUnlocked(key);
+          const lv = turretLv(key);
+          return `<button class="card" data-turret="${key}" style="width:104px;padding:14px 8px;${unlocked ? "" : "opacity:.45"}">
+            ${shapeIcon(def.cls, unlocked ? def.color : "#5a6a8a")}
+            <b style="font-size:12px">${def.name}</b>
+            ${unlocked
+              ? `<span style="color:${def.color};font-weight:800">LV ${lv}${lv >= TURRET_MAX_LV ? " &middot; MAX" : ""}</span>`
+              : `<span style="color:#ff5d5d;font-weight:800">CLEAR STAGE ${TURRET_GATES[key]}</span>`}
+          </button>`;
+        }).join("")}
+      </div>
+      <button class="ghost-btn" id="backBtn">BACK</button>
+    </div>`;
+  $("backBtn").addEventListener("click", showMenu);
+  overlayEl.querySelectorAll("[data-turret]").forEach(btn => {
+    btn.addEventListener("click", () => { ensureAudio(); showTurretDetail(btn.dataset.turret); });
+  });
+}
+
+function showTurretDetail(key) {
+  setState("menu");
+  overlayEl.style.display = "flex";
+  const def = TURRET_TYPES[key];
+  const lv = turretLv(key);
+  const unlocked = turretUnlocked(key);
+  const s = turretStats({ type: key, level: 1 });
+  const cost = turretUpgradeCost(lv);
+  const maxed = lv >= TURRET_MAX_LV;
+  const sigs = SIGNATURE_CARDS[key];
+  const stars = n => Array.from({ length: n }, () => shapeIcon("dia", "#ffd23f", "width:8px;height:8px")).join("");
+  const kindStats = {
+    bullet: [["DMG", Math.round(s.dmg)], ["RATE", s.rate.toFixed(1) + "/s"]],
+    beam: [["DPS", Math.round(s.dps)], ["BEAM", "CONTINUOUS"]],
+    pulse: [["PULSE DMG", Math.round(s.pulseDmg)], ["SLOW", Math.round(s.slow * 100) + "%"]],
+    missile: [["DMG", Math.round(s.dmg)], ["RATE", s.rate.toFixed(1) + "/s"]],
+    tesla: [["DMG", Math.round(s.dmg)], ["CHAINS", 1 + def.chains + (turretLabMul(key).special > 1 ? 1 : 0)]],
+  };
+  const cells = [
+    ["TYPE", def.kind.toUpperCase()],
+    ...kindStats[def.kind],
+    ["RANGE", def.kind === "missile" ? "GLOBAL" : Math.round(s.range)],
+    ...(s.splash ? [["SPLASH", Math.round(s.splash)]] : []),
+    ["BUILD COST", def.cost],
+  ];
+  const miles = [
+    { lv: 2, html: `Unlock <span class="cardname">[${sigs[0].name}]</span> ${stars(1)}` },
+    { lv: 3, html: "Range +10%" },
+    { lv: 5, html: `Unlock <span class="cardname">[${sigs[1].name}]</span> ${stars(2)} &middot; Fire rate +10%` },
+    { lv: 7, html: "Special effect +20%" },
+    { lv: 10, html: "Damage +20%" },
+  ];
+  const idx = TURRET_ORDER.indexOf(key);
+  overlayEl.innerHTML = `
+    <div class="modal" style="max-width:480px">
+      <div class="legend" style="margin-top:0">${shapeIcon(def.cls, unlocked ? def.color : "#5a6a8a", "width:34px;height:34px")}
+        <div class="title" style="font-size:clamp(22px,5vw,30px)">${def.name} <span style="color:${def.color}">LV ${lv}</span></div>
+      </div>
+      <div class="subtitle">${def.desc}${unlocked ? "" : ` &mdash; <b style="color:#ff5d5d">CLEAR STAGE ${TURRET_GATES[key]} TO UNLOCK</b>`}</div>
+      <div class="stat-grid">
+        ${cells.map(([l, v]) => `<div class="stat-cell">${l}<b>${v}</b></div>`).join("")}
+      </div>
+      <div class="miles">
+        ${miles.map(m => `<div class="mile ${lv >= m.lv ? "done" : ""}"><span>${m.html}</span><b>LV ${m.lv}</b></div>`).join("")}
+      </div>
+      <button class="lab-upg" id="upgBtn" ${!unlocked || maxed || cores < cost ? "disabled" : ""}>
+        ${maxed ? "MAX LEVEL" : `UPGRADE &mdash; ${cost} CORES`}
+      </button>
+      <div class="subtitle" style="margin-top:8px">Each level: turret DMG +8% &middot; total crit DMG +2%<br>
+        Cores: <b style="color:#ffd23f">${cores}</b></div>
+      <button class="ghost-btn" id="backBtn">BACK</button>
+    </div>
+    <button class="arrow left" id="prevT"><i></i></button>
+    <button class="arrow right" id="nextT"><i></i></button>`;
+  $("backBtn").addEventListener("click", showLab);
+  $("prevT").addEventListener("click", () => showTurretDetail(TURRET_ORDER[(idx + TURRET_ORDER.length - 1) % TURRET_ORDER.length]));
+  $("nextT").addEventListener("click", () => showTurretDetail(TURRET_ORDER[(idx + 1) % TURRET_ORDER.length]));
+  $("upgBtn").addEventListener("click", () => {
+    ensureAudio();
+    if (!unlocked || maxed || cores < turretUpgradeCost(turretLv(key))) { sfx.deny(); return; }
+    cores -= turretUpgradeCost(turretLv(key));
+    turretMeta[key] = turretLv(key) + 1;
+    saveMeta();
+    saveTurretMeta();
+    sfx.upgrade();
+    showTurretDetail(key);
+  });
 }
 
 function showShop() {
@@ -1868,7 +2071,18 @@ function showIntel() {
 function showCards() {
   setState("picking");
   let options = PERKS.filter(p => !(p.id === "repair" && G.base.hp >= G.base.maxHp));
-  options = shuffle(options.slice()).slice(0, 3);
+  // signature cards for turrets built this run, unlocked by their lab level
+  const sigs = [];
+  for (const m of G.mounts) {
+    if (!m.turret) continue;
+    const key = m.turret.type;
+    for (const c of SIGNATURE_CARDS[key]) {
+      if (turretLv(key) >= sigUnlockLv(c.star) && !perkCount(c.id) && !sigs.some(x => x.id === c.id)) {
+        sigs.push({ ...c, cls: TURRET_TYPES[key].cls, color: TURRET_TYPES[key].color });
+      }
+    }
+  }
+  options = shuffle(options.concat(sigs)).slice(0, 3);
   overlayEl.style.display = "flex";
   overlayEl.innerHTML = `
     <div class="modal">
@@ -1876,11 +2090,12 @@ function showCards() {
       <div class="subtitle">Choose a system upgrade</div>
       <div class="cards">
         ${options.map((p, idx) => `
-          <button class="card" data-idx="${idx}">
+          <button class="card" data-idx="${idx}" ${p.star ? `style="border-color:${p.color}"` : ""}>
             ${shapeIcon(p.cls, p.color)}
+            ${p.star ? `<span style="display:flex;gap:3px">${shapeIcon("dia", "#ffd23f", "width:9px;height:9px")}${p.star > 1 ? shapeIcon("dia", "#ffd23f", "width:9px;height:9px") : ""}</span>` : ""}
             <b>${p.name}</b>
             <span>${p.desc}</span>
-            ${perkCount(p.id) ? `<span style="color:${p.color}">owned x${perkCount(p.id)}</span>` : ""}
+            ${!p.star && perkCount(p.id) ? `<span style="color:${p.color}">owned x${perkCount(p.id)}</span>` : ""}
           </button>`).join("")}
       </div>
     </div>`;
@@ -1926,6 +2141,7 @@ function gameOver() {
   const coresEarned = Math.max(1, Math.round(G.score / 150));
   cores += coresEarned;
   saveMeta();
+  G.perks = {};
   setState("gameover");
   overlayEl.style.display = "flex";
   overlayEl.innerHTML = `
