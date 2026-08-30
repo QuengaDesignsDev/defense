@@ -40,6 +40,9 @@ Works with mouse and touch (mobile-friendly).
   apply to every future run.
 - Two difficulties, toggled in the main menu: **Normal**, and **Elite**
   (enemies +50% HP and +40% damage, score and cores ×1.5).
+- The **home screen** shows your besieged planet: pick a starting stage with
+  the side arrows (unlocked by clearing stages; later starts grant bonus
+  energy), and open the Upgrades shop or the Intel briefing from the tiles.
 
 ### Turrets
 

@@ -47,6 +47,7 @@ function resize() {
   layoutMounts();
   makeStars();
   makeCity();
+  makeSkyline();
 }
 window.addEventListener("resize", resize);
 
@@ -194,6 +195,8 @@ function saveMeta() {
 }
 let elite = localStorage.getItem("shapeDefense.elite") === "1";
 const enemyDmgMul = () => (elite ? 1.4 : 1);
+let bestCleared = +(localStorage.getItem("shapeDefense.bestStage") || 0) || 0;
+let menuStage = bestCleared + 1;
 
 /* ============================== state ============================== */
 const G = {
@@ -264,6 +267,115 @@ function makeStars() {
   for (let i = 0; i < n; i++) {
     stars.push({ x: Math.random() * W, y: Math.random() * groundY, z: rand(0.25, 1), tw: rand(0, TAU) });
   }
+}
+
+/* menu planet: a besieged world ringed by city silhouettes */
+let skyline = [];
+function makeSkyline() {
+  skyline = [];
+  const n = 26;
+  for (let i = 0; i < n; i++) {
+    skyline.push({
+      ang: (i / n) * TAU + rand(-0.04, 0.04),
+      w: rand(0.05, 0.12),
+      h: rand(0.06, 0.2),
+      spire: Math.random() < 0.2,
+    });
+  }
+}
+
+function drawPlanet() {
+  const px = W / 2, py = H * 0.47, pr = Math.min(W, H) * 0.27;
+  const rot = G.time * 0.02;
+  ctx.save();
+
+  // atmosphere glow + body
+  ctx.shadowColor = "#7db8ff";
+  ctx.shadowBlur = 46;
+  ctx.fillStyle = "#111a30";
+  ctx.beginPath();
+  ctx.arc(px, py, pr, 0, TAU);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // continents: dark polygon blobs clipped to the disc
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(px, py, pr, 0, TAU);
+  ctx.clip();
+  ctx.fillStyle = "rgba(6,9,20,0.75)";
+  const blobs = [[-0.35, -0.25, 0.42, 7], [0.3, 0.05, 0.34, 8], [-0.05, 0.42, 0.3, 6], [0.42, -0.42, 0.24, 7]];
+  for (const [ox, oy, s, sides] of blobs) {
+    poly(px + ox * pr, py + oy * pr, s * pr, sides, rot * 2 + ox);
+    ctx.fill();
+  }
+  // terminator shadow on the lower-left
+  const sh = ctx.createRadialGradient(px + pr * 0.4, py - pr * 0.4, pr * 0.2, px, py, pr * 1.05);
+  sh.addColorStop(0, "rgba(0,0,0,0)");
+  sh.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = sh;
+  ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+  ctx.restore();
+
+  // rim highlight
+  ctx.strokeStyle = "rgba(150,195,255,0.35)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(px, py, pr, 0, TAU);
+  ctx.stroke();
+
+  // city silhouettes around the rim, slowly rotating
+  ctx.fillStyle = "#070b18";
+  for (const b of skyline) {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(b.ang + rot);
+    const bw = pr * b.w, bh = pr * b.h;
+    ctx.fillRect(-bw / 2, -pr - bh + 2, bw, bh + 4);
+    if (b.spire) ctx.fillRect(-1.5, -pr - bh - pr * 0.06 + 2, 3, pr * 0.06);
+    ctx.restore();
+  }
+
+  // burning impact sites on the rim
+  for (let i = 0; i < 3; i++) {
+    const a = [0.6, 2.3, 4.4][i] + rot - Math.PI / 2;
+    const fx = px + Math.cos(a) * pr;
+    const fy = py + Math.sin(a) * pr;
+    const flick = 0.5 + 0.5 * Math.sin(G.time * 7 + i * 2.1);
+    ctx.globalAlpha = 0.35 + 0.4 * flick;
+    ctx.fillStyle = "#ff9a3d";
+    ctx.shadowColor = "#ff9a3d";
+    ctx.shadowBlur = 16;
+    poly(fx, fy, pr * 0.045 * (0.7 + flick * 0.5), 5, G.time * 3 + i);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+
+  // incoming meteor, upper right, with a flame tail
+  const ma = -0.85 + Math.sin(G.time * 0.35) * 0.04;
+  const mx = px + Math.cos(ma) * pr * 1.3;
+  const my = py + Math.sin(ma) * pr * 1.3;
+  if (Math.random() < 0.4) {
+    G.particles.push({
+      x: mx + rand(-4, 4), y: my - rand(6, 14),
+      vx: rand(20, 45), vy: rand(-55, -25),
+      r: rand(2, 4.5), sides: randInt(3, 5),
+      rot: rand(0, TAU), spin: rand(-6, 6),
+      color: pick(["#ff9a3d", "#ffd23f", "#ff5d3d"]), life: rand(0.3, 0.55),
+    });
+  }
+  ctx.fillStyle = "#cf8a5b";
+  ctx.shadowColor = "#ff9a3d";
+  ctx.shadowBlur = 14;
+  poly(mx, my, pr * 0.11, 7, G.time * 0.8);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  poly(mx - pr * 0.03, my - pr * 0.02, pr * 0.035, 6, 0);
+  ctx.fill();
+
+  ctx.restore();
 }
 
 function makeCity() {
@@ -372,6 +484,10 @@ function stageDone() {
 }
 
 function stageClear() {
+  if (G.stage > bestCleared) {
+    bestCleared = G.stage;
+    localStorage.setItem("shapeDefense.bestStage", String(bestCleared));
+  }
   const bonus = Math.round((30 + G.stage * 6) * energyMul());
   G.energy += bonus;
   addFloater(W / 2, groundY - dome.h - 30, `STAGE CLEAR  +${bonus}`, "#35e0ff");
@@ -1002,7 +1118,8 @@ function render() {
     ctx.translate(rand(-G.shake, G.shake) * 0.5, rand(-G.shake, G.shake) * 0.5);
   }
 
-  if (G.state === "menu" || G.state === "gameover") drawAmbient();
+  if (G.state === "menu") { drawPlanet(); drawAmbient(); }
+  else if (G.state === "gameover") drawAmbient();
   drawDome();
   drawGround();
   drawBase();
@@ -1555,6 +1672,7 @@ document.addEventListener("visibilitychange", () => {
 /* ============================== states & screens ============================== */
 function setState(next) {
   G.state = next;
+  overlayEl.classList.remove("home");
   hudEl.style.display = next === "menu" || next === "gameover" ? "none" : "flex";
   bottombarEl.style.display = next === "playing" ? "flex" : "none";
   if (next !== "playing") closePanel();
@@ -1597,6 +1715,9 @@ function resetRun() {
 
 function beginRun() {
   resetRun();
+  // start at the selected stage; later starts bring extra starting energy
+  G.stage = menuStage - 1;
+  G.energy += (menuStage - 1) * 30;
   setState("playing");
   startStage();
   showHint("TAP A GROUND SOCKET TO BUILD A TURRET", 4500);
@@ -1604,29 +1725,85 @@ function beginRun() {
 
 function showMenu() {
   setState("menu");
+  overlayEl.classList.add("home");
   overlayEl.style.display = "flex";
-  const anyMeta = cores > 0 || Object.values(meta).some(v => v > 0);
+  menuStage = clamp(menuStage, 1, bestCleared + 1);
+  const metaLv = meta.hull + meta.dmg + meta.react + meta.harv;
+  const cleared = bestCleared >= menuStage;
+  const diff = elite ? "ELITE" : "NORMAL";
+  overlayEl.innerHTML = `
+    <div class="home-wrap">
+      <div>
+        <div class="home-top">
+          <div class="avatar">${shapeIcon("hex", "#35e0ff")}<b>${metaLv}</b></div>
+          <div class="pname">COMMANDER<small>SHAPE DEFENSE</small></div>
+          <div class="chips">
+            <button class="res-chip" id="coresChip" title="Cores — spend in Upgrades">${shapeIcon("hex", "#ffd23f", "width:13px;height:13px")} ${cores}<span class="plus">+</span></button>
+            <button class="res-chip" id="bestChip" title="Best score">${shapeIcon("dia", "#35e0ff", "width:12px;height:12px")} ${G.highScore.toLocaleString()}</button>
+          </div>
+        </div>
+        <div class="home-head">
+          <div class="stage-pill ${elite ? "elite" : ""}">${diff} STAGE ${menuStage}</div>
+          <div class="record">Highest Stage Cleared: ${bestCleared || "&mdash;"}</div>
+          <div class="seg">
+            <button id="segNormal" class="${elite ? "" : "on"}">NORMAL</button>
+            <button id="segElite" class="${elite ? "on elite" : ""}">ELITE</button>
+          </div>
+        </div>
+      </div>
+      <div class="home-bottom">
+        <div class="task-chip">CLEAR ${diff} STAGE ${menuStage}<br><b style="color:${cleared ? "#38ffb0" : "#ff5d5d"}">${cleared ? 1 : 0}/1</b></div>
+        <div class="home-actions">
+          <button class="tile" id="shopTile">${shapeIcon("hex", "#ffd23f")}UPGRADES</button>
+          <div style="flex:1">
+            <button class="battle-btn" id="playBtn">BATTLE</button>
+            <div class="battle-cost">${shapeIcon("dia", "#35e0ff", "width:10px;height:10px")} STAGE ${menuStage}${menuStage > 1 ? ` &middot; +${(menuStage - 1) * 30} ENERGY` : ""}</div>
+          </div>
+          <button class="tile" id="intelTile">${shapeIcon("tri", "#ff6161")}INTEL</button>
+        </div>
+      </div>
+    </div>
+    <button class="arrow left" id="prevStage" ${menuStage <= 1 ? "disabled" : ""}><i></i></button>
+    <button class="arrow right" id="nextStage" ${menuStage >= bestCleared + 1 ? "disabled" : ""}><i></i></button>`;
+  $("playBtn").addEventListener("click", () => {
+    ensureAudio();
+    beginRun();
+  });
+  const setElite = val => {
+    ensureAudio();
+    if (elite === val) return;
+    elite = val;
+    localStorage.setItem("shapeDefense.elite", elite ? "1" : "0");
+    sfx.card();
+    showMenu();
+  };
+  $("segNormal").addEventListener("click", () => setElite(false));
+  $("segElite").addEventListener("click", () => setElite(true));
+  $("prevStage").addEventListener("click", () => {
+    ensureAudio();
+    if (menuStage > 1) { menuStage--; sfx.build(); showMenu(); }
+  });
+  $("nextStage").addEventListener("click", () => {
+    ensureAudio();
+    if (menuStage < bestCleared + 1) { menuStage++; sfx.build(); showMenu(); }
+  });
+  $("shopTile").addEventListener("click", showShop);
+  $("coresChip").addEventListener("click", showShop);
+  $("bestChip").addEventListener("click", showIntel);
+  $("intelTile").addEventListener("click", showIntel);
+}
+
+function showShop() {
+  setState("menu");
+  overlayEl.style.display = "flex";
   overlayEl.innerHTML = `
     <div class="modal">
-      <div class="title">SHAPE<br>DEFENSE<small>METEOR SIEGE</small></div>
-      <div class="subtitle">The sky is falling — in polygons.<br>
-      Your gunner auto-fires. Build turrets, level up, pick cards, survive the stages.</div>
-      <div class="legend">
-        <div>${shapeIcon("hex", "#cf8a5b")} METEOR</div>
-        <div>${shapeIcon("tri", "#ff9a3d")} ZIGZAG</div>
-        <div>${shapeIcon("pent", "#ff5d5d")} BLOB</div>
-        <div>${shapeIcon("hex", "#ffd23f")} SPLITTER</div>
-        <div>${shapeIcon("dia", "#ff4d9b")} SNIPER</div>
-      </div>
-      ${G.highScore ? `<div class="subtitle" style="margin-top:16px">BEST SCORE — <b style="color:#fff">${G.highScore.toLocaleString()}</b></div>` : ""}
-      <button class="big-btn" id="playBtn">DEPLOY</button>
-      <div><button class="ghost-btn" id="diffBtn" style="${elite ? "color:#ff3d6e;border-color:#ff3d6e" : ""}">DIFFICULTY: ${elite ? "ELITE" : "NORMAL"}</button></div>
-      ${elite ? `<div class="subtitle" style="margin-top:8px;color:#ff3d6e">Elite: enemies +50% HP, +40% damage &middot; score &amp; cores x1.5</div>` : ""}
-      ${anyMeta ? `
-      <div class="legend" style="margin-top:26px">${shapeIcon("hex", "#ffd23f")}
+      <div class="title" style="font-size:clamp(24px,6vw,36px)">UPGRADES</div>
+      <div class="legend" style="margin-top:14px">${shapeIcon("hex", "#ffd23f")}
         <div style="font-size:14px;color:#dfe8ff;font-weight:800">CORES <span style="color:#ffd23f">${cores}</span></div>
       </div>
-      <div class="cards" style="margin-top:12px">
+      <div class="subtitle">Permanent upgrades, applied to every run. Earn cores by playing.</div>
+      <div class="cards" style="margin-top:14px">
         ${META_UPGRADES.map(u => {
           const lvl = meta[u.id];
           const maxed = lvl >= u.max;
@@ -1640,19 +1817,10 @@ function showMenu() {
             <span style="color:#ffd23f;font-weight:800">${maxed ? "MAX" : cost + " CORES"}</span>
           </button>`;
         }).join("")}
-      </div>` : ""}
+      </div>
+      <button class="ghost-btn" id="backBtn">BACK</button>
     </div>`;
-  $("playBtn").addEventListener("click", () => {
-    ensureAudio();
-    beginRun();
-  });
-  $("diffBtn").addEventListener("click", () => {
-    ensureAudio();
-    elite = !elite;
-    localStorage.setItem("shapeDefense.elite", elite ? "1" : "0");
-    sfx.card();
-    showMenu();
-  });
+  $("backBtn").addEventListener("click", showMenu);
   overlayEl.querySelectorAll("[data-meta]").forEach(btn => {
     btn.addEventListener("click", () => {
       ensureAudio();
@@ -1664,9 +1832,37 @@ function showMenu() {
       meta[u.id]++;
       saveMeta();
       sfx.upgrade();
-      showMenu();
+      showShop();
     });
   });
+}
+
+function showIntel() {
+  setState("menu");
+  overlayEl.style.display = "flex";
+  overlayEl.innerHTML = `
+    <div class="modal">
+      <div class="title" style="font-size:clamp(24px,6vw,36px)">INTEL</div>
+      <div class="subtitle">The sky is falling &mdash; in polygons. Your gunner auto-fires at the
+      lowest threat. Tap ground sockets to build turrets with energy from kills.
+      Level up to pick upgrade cards. Survive each stage's timer; every 5th stage a boss descends.</div>
+      <div class="legend" style="margin-top:18px">
+        <div>${shapeIcon("hex", "#cf8a5b")} METEOR</div>
+        <div>${shapeIcon("tri", "#ff9a3d")} ZIGZAG</div>
+        <div>${shapeIcon("pent", "#ff5d5d")} BLOB</div>
+        <div>${shapeIcon("hex", "#ffd23f")} SPLITTER</div>
+      </div>
+      <div class="legend">
+        <div>${shapeIcon("pent", "#d05cff")} TANK</div>
+        <div>${shapeIcon("dia", "#ff4d9b")} SNIPER</div>
+        <div>${shapeIcon("oct", "#ff3d6e")} BOSS</div>
+        <div>${shapeIcon("hex", "#b44dff")} CARRIER</div>
+      </div>
+      <div class="subtitle" style="margin-top:14px">Elite mode: enemies +50% HP and +40% damage &middot; score &amp; cores x1.5.<br>
+      Best score: <b style="color:#fff">${G.highScore.toLocaleString()}</b></div>
+      <button class="ghost-btn" id="backBtn">BACK</button>
+    </div>`;
+  $("backBtn").addEventListener("click", showMenu);
 }
 
 function showCards() {
