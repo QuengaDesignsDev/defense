@@ -172,7 +172,7 @@ const PERKS = [
   { id: "multi",  name: "SPLIT FIRE",     cls: "tri",  color: "#35e0ff", desc: "Hero fires +1 projectile" },
   { id: "repair", name: "NANO REPAIR",    cls: "hex",  color: "#38ffb0", desc: "Restore 40% base hull", once: true },
   { id: "hull",   name: "REINFORCED HULL",cls: "hex",  color: "#8aa6ff", desc: "Max hull +25% (and heal it)" },
-  { id: "energy", name: "ENERGY SIPHON",  cls: "dia",  color: "#35e0ff", desc: "Energy from kills +25%" },
+  { id: "xp", name: "XP MODULE",  cls: "dia",  color: "#35e0ff", desc: "XP gain +20%" },
   { id: "crit",   name: "CRITICAL MATRIX",cls: "dia",  color: "#ff53d4", desc: "+10% crit chance (x2.5 dmg)" },
   { id: "velo",   name: "VELOCITY ROUNDS",cls: "pent", color: "#6dff8c", desc: "Projectile speed +30%, range +10%" },
   { id: "hero",   name: "GUN MODS",       cls: "oct",  color: "#fff06a", desc: "Hero damage +30%" },
@@ -182,8 +182,8 @@ const PERKS = [
 const META_UPGRADES = [
   { id: "hull",  name: "HULL PLATING", desc: "+10% max hull per level",      cls: "hex",  color: "#8aa6ff", max: 5 },
   { id: "dmg",   name: "DAMAGE AMP",   desc: "+5% all damage per level",     cls: "tri",  color: "#ff6161", max: 5 },
-  { id: "react", name: "REACTOR",      desc: "+15 starting energy per level", cls: "dia",  color: "#35e0ff", max: 5 },
-  { id: "harv",  name: "HARVESTER",    desc: "+5% kill energy per level",    cls: "pent", color: "#6dff8c", max: 5 },
+  { id: "react", name: "XP AMP",       desc: "+6% XP gain per level",        cls: "dia",  color: "#35e0ff", max: 5 },
+  { id: "harv",  name: "SALVAGE",      desc: "+6% cores earned per level",   cls: "pent", color: "#6dff8c", max: 5 },
 ];
 let meta = { hull: 0, dmg: 0, react: 0, harv: 0 };
 try { meta = { ...meta, ...JSON.parse(localStorage.getItem("shapeDefense.meta") || "{}") }; } catch (e) { /* fresh start */ }
@@ -248,6 +248,31 @@ const SIGNATURE_CARDS = {
 };
 const sigUnlockLv = star => (star === 1 ? 2 : 5);
 
+/* turret combos: build the turret + hold the required cards, and the
+ * combo effect activates automatically (like the reference's Turret Combo list) */
+const COMBOS = [
+  { id: "flame",  name: "FLAME BULLET", turret: "blaster", req: { dmg: 2 },  desc: "Blaster bullets ignite enemies" },
+  { id: "shrap",  name: "SHRAPNEL",     turret: "cannon",  req: { velo: 1 }, desc: "Cannon blasts scatter shard bullets" },
+  { id: "perma",  name: "PERMAFROST",   turret: "frost",   req: { hull: 1 }, desc: "Frost slow lasts twice as long" },
+  { id: "gamma",  name: "GAMMA BEAM",   turret: "laser",   req: { rate: 2 }, desc: "Laser damage +60%" },
+  { id: "seeker", name: "SEEKER CRITS", turret: "missile", req: { crit: 1 }, desc: "Missiles crit 25% of the time" },
+  { id: "ion",    name: "ION STORM",    turret: "tesla",   req: { xp: 1 },   desc: "Tesla chains +1 jump and ignite" },
+];
+function comboReady(c) {
+  return G.mounts.some(m => m.turret && m.turret.type === c.turret)
+    && Object.entries(c.req).every(([k, n]) => perkCount(k) >= n);
+}
+function checkCombos() {
+  for (const c of COMBOS) {
+    if (!G.combos.includes(c.id) && comboReady(c)) {
+      G.combos.push(c.id);
+      addFloater(W / 2, H * 0.35, `COMBO: ${c.name}`, TURRET_TYPES[c.turret].color);
+      addRing(W / 2, H * 0.35, TURRET_TYPES[c.turret].color, 120, 4);
+      sfx.levelUp();
+    }
+  }
+}
+
 /* ============================== state ============================== */
 const G = {
   state: "menu", // menu | playing | picking | paused | gameover
@@ -260,7 +285,7 @@ const G = {
   bossActive: false,
   bossSpawned: false,
   speed: 1,
-  energy: 0,
+  combos: [],
   kills: 0,
   score: 0,
   time: 0,
@@ -288,7 +313,9 @@ const G = {
 const perkCount = id => G.perks[id] || 0;
 const dmgMul = () => (1 + 0.2 * perkCount("dmg")) * (1 + 0.05 * meta.dmg);
 const rateMul = () => 1 + 0.15 * perkCount("rate");
-const energyMul = () => (1 + 0.25 * perkCount("energy")) * (1 + 0.05 * meta.harv);
+const xpMul = () => (1 + 0.2 * perkCount("xp")) * (1 + 0.06 * meta.react);
+const coresMul = () => 1 + 0.06 * meta.harv;
+const comboHas = id => G.combos.includes(id);
 const critChance = () => 0.1 * perkCount("crit");
 const projSpeedMul = () => 1 + 0.3 * perkCount("velo");
 const rangeMul = () => 1 + 0.1 * perkCount("velo");
@@ -440,7 +467,7 @@ function makeCity() {
 
 /* ============================== DOM refs ============================== */
 const $ = id => document.getElementById(id);
-const hudEl = $("hud"), stageEl = $("stageNum"), timerEl = $("timerNum"), energyEl = $("energyNum");
+const hudEl = $("hud"), stageEl = $("stageNum"), timerEl = $("timerNum");
 const lvlEl = $("lvlNum"), xpfillEl = $("xpfill");
 const bottombarEl = $("bottombar"), hintEl = $("hint");
 const buildpanelEl = $("buildpanel"), overlayEl = $("overlay");
@@ -538,9 +565,9 @@ function stageClear() {
     bestCleared = G.stage;
     localStorage.setItem("shapeDefense.bestStage", String(bestCleared));
   }
-  const bonus = Math.round((30 + G.stage * 6) * energyMul());
-  G.energy += bonus;
-  addFloater(W / 2, groundY - dome.h - 30, `STAGE CLEAR  +${bonus}`, "#35e0ff");
+  const bonus = 4 + G.stage;
+  gainXp(bonus);
+  addFloater(W / 2, groundY - dome.h - 30, `STAGE CLEAR  +${bonus} XP`, "#35e0ff");
   sfx.stageClear();
   G.stageBreak = 2.5;
 }
@@ -735,7 +762,6 @@ function damageEnemy(e, amt, canCrit = true) {
 function killEnemy(e) {
   e.dead = true;
   G.kills++;
-  G.energy += Math.round(e.def.energy * energyMul());
   gainXp(e.def.xp);
   burst(e.x, e.y, e.def.color, e.def.boss ? 46 : 10, e.def.boss ? 6 : 3, e.def.boss ? 320 : 170);
   addRing(e.x, e.y, e.def.color, e.def.boss ? 160 : 42);
@@ -751,7 +777,7 @@ function killEnemy(e) {
 
 function gainXp(amt) {
   const h = G.hero;
-  h.xp += amt;
+  h.xp += amt * xpMul();
   while (h.xp >= xpNeeded(h.level)) {
     h.xp -= xpNeeded(h.level);
     h.level++;
@@ -843,7 +869,7 @@ function turretStats(t) {
   const dmgBase = mul * dmgMul() * lab.dmg;
   return {
     dmg: (def.dmg || 0) * dmgBase * (key === "blaster" ? 1 + 0.5 * perkCount("blaster2") : 1),
-    dps: (def.dps || 0) * dmgBase * (key === "laser" ? lab.special : 1),
+    dps: (def.dps || 0) * dmgBase * (key === "laser" ? lab.special * (comboHas("gamma") ? 1.6 : 1) : 1),
     pulseDmg: (def.pulseDmg || 0) * dmgBase,
     rate: (def.rate || 0) * Math.pow(1.12, t.level - 1) * rateMul() * lab.rate,
     range: def.range * (1 + 0.12 * (t.level - 1)) * rangeMul() * lab.range * SCALE,
@@ -852,7 +878,7 @@ function turretStats(t) {
       * (key === "cannon" ? 1 + 0.35 * perkCount("cannon1") : 1)
       * (key === "missile" ? 1 + 0.4 * perkCount("missile1") : 1),
     slow: def.slow ? Math.min(0.85, (def.slow + 0.06 * (t.level - 1) + 0.12 * perkCount("frost1")) * lab.special) : 0,
-    slowDur: def.slowDur || 0,
+    slowDur: (def.slowDur || 0) * (key === "frost" && comboHas("perma") ? 2 : 1),
     pulse: def.pulse ? def.pulse / (Math.pow(1.12, t.level - 1) * rateMul() * lab.rate) : 0,
   };
 }
@@ -938,7 +964,8 @@ function updateTurrets(dt) {
         let dmg = s.dmg;
         const jumps = def.chains + (t.level - 1)
           + (turretLabMul("tesla").special > 1 ? 1 : 0)
-          + 2 * perkCount("tesla1");
+          + 2 * perkCount("tesla1")
+          + (comboHas("ion") ? 1 : 0);
         for (let j = 0; j <= jumps && cur; j++) {
           hit.add(cur);
           pts.push({ x: cur.x, y: cur.y });
@@ -946,6 +973,9 @@ function updateTurrets(dt) {
           if (perkCount("tesla2")) {
             cur.slow = Math.max(cur.slow || 0, 1);
             cur.slowAmt = Math.max(cur.slowAmt || 0, 0.3);
+          }
+          if (comboHas("ion") && !cur.dead) {
+            cur.burn = { dps: Math.max(cur.burn ? cur.burn.dps : 0, dmg * 0.1), t: 2 };
           }
           burst(cur.x, cur.y, def.color, 3, 2, 90);
           dmg *= 0.7;
@@ -992,7 +1022,9 @@ function updateTurrets(dt) {
             dmg: s.dmg, splash: s.splash,
             color: def.color, r: def.splash ? 5 : 3,
             life: 2.2,
-            burn: t.type === "cannon" && perkCount("cannon2") > 0,
+            burn: (t.type === "cannon" && perkCount("cannon2") > 0)
+              || (t.type === "blaster" && comboHas("flame")),
+            shrapnel: t.type === "cannon" && comboHas("shrap"),
           });
         }
         burst(mount.x + Math.cos(t.aim) * mount.r, mount.y - 10 + Math.sin(t.aim) * mount.r, def.color, 2, 1.5, 70);
@@ -1027,8 +1059,23 @@ function updateProjectiles(dt) {
       if (e.dead || e.y < -10) continue;
       if (dist(b.x, b.y, e.x, e.y) <= e.r + b.r) {
         b.dead = true;
-        if (b.splash) explodeAt(b.x, b.y, b.dmg, b.splash, b.color, b.burn);
-        else { damageEnemy(e, b.dmg); burst(b.x, b.y, b.color, 3, 2, 90); }
+        if (b.splash) {
+          explodeAt(b.x, b.y, b.dmg, b.splash, b.color, b.burn);
+          if (b.shrapnel) {
+            for (let k = 0; k < 4; k++) {
+              const sa = rand(0, TAU);
+              G.bullets.push({
+                x: b.x, y: b.y,
+                vx: Math.cos(sa) * 260 * SCALE, vy: Math.sin(sa) * 260 * SCALE,
+                dmg: b.dmg * 0.3, splash: 0, color: "#ffd23f", r: 2.5, life: 0.8,
+              });
+            }
+          }
+        } else {
+          damageEnemy(e, b.dmg);
+          if (b.burn && !e.dead) e.burn = { dps: Math.max(e.burn ? e.burn.dps : 0, b.dmg * 0.15), t: 3 };
+          burst(b.x, b.y, b.color, 3, 2, 90);
+        }
         break;
       }
     }
@@ -1056,7 +1103,9 @@ function updateProjectiles(dt) {
       if (e.dead || e.y < -10) continue;
       if (dist(m.x, m.y, e.x, e.y) <= e.r + 5) {
         m.dead = true;
-        damageEnemy(e, m.dmg);
+        let dmg = m.dmg;
+        if (comboHas("seeker") && Math.random() < 0.25) dmg *= critDmg();
+        damageEnemy(e, dmg);
         explodeAt(m.x, m.y, m.dmg * 0.5, m.splash, m.color);
         break;
       }
@@ -1106,7 +1155,7 @@ function updateFx(dt) {
   }
   G.floaters = G.floaters.filter(fl => fl.life > 0);
 
-  const tx = W - 130, ty = 28;
+  const tx = 60, ty = 64; // motes are XP now: they fly to the level bar
   for (const m of G.motes) {
     m.t += dt;
     if (m.t > 0.3) {
@@ -1174,11 +1223,9 @@ function update(dt) {
 }
 
 /* ============================== HUD ============================== */
-let lastStage = -1, lastEnergy = -1, lastTimer = "", lastLvl = -1, lastXp = -1;
+let lastStage = -1, lastTimer = "", lastLvl = -1, lastXp = -1;
 function updateHud() {
   if (G.stage !== lastStage) { stageEl.textContent = Math.max(1, G.stage); lastStage = G.stage; }
-  const en = Math.floor(G.energy);
-  if (en !== lastEnergy) { energyEl.textContent = en; lastEnergy = en; refreshPanelAffordability(); }
   let tstr;
   if (isBossStage(G.stage)) tstr = "BOSS";
   else {
@@ -1630,95 +1677,19 @@ function drawAmbient() {
   ctx.globalAlpha = 1;
 }
 
-/* ============================== build panel ============================== */
-function turretInvested(t) {
-  let total = TURRET_TYPES[t.type].cost;
-  for (let l = 1; l < t.level; l++) total += upgradeCost(t.type, l);
-  return total;
+/* ============================== turret placement (card-driven) ============================== */
+const MOUNT_ORDER = [1, 2, 0, 3]; // fill the center sockets first
+function placeTurret(key) {
+  const idx = MOUNT_ORDER.find(i => !G.mounts[i].turret);
+  if (idx === undefined) return;
+  const mount = G.mounts[idx];
+  mount.turret = { type: key, level: 1, cd: 0, rot: 0 };
+  sfx.build();
+  addRing(mount.x, mount.y - 10, TURRET_TYPES[key].color, 40);
+  burst(mount.x, mount.y - 10, TURRET_TYPES[key].color, 8, 2, 120);
 }
-
-function openPanelForMount(i) {
-  G.selectedMount = i;
-  const mount = G.mounts[i];
-  buildpanelEl.innerHTML = "";
-  buildpanelEl.style.display = "flex";
-  bottombarEl.style.visibility = "hidden";
-
-  if (!mount.turret) {
-    for (const key of TURRET_ORDER) {
-      if (!turretUnlocked(key)) continue;
-      const def = TURRET_TYPES[key];
-      const btn = document.createElement("button");
-      btn.className = "build-btn";
-      btn.dataset.cost = def.cost;
-      btn.title = def.desc;
-      btn.innerHTML = `${shapeIcon(def.cls, def.color)}<span>${def.name}</span><span class="cost"><span class="gem"></span>${def.cost}</span>`;
-      btn.addEventListener("click", ev => {
-        ev.stopPropagation();
-        if (G.energy < def.cost) { sfx.deny(); return; }
-        G.energy -= def.cost;
-        mount.turret = { type: key, level: 1, cd: 0, rot: 0 };
-        sfx.build();
-        addRing(mount.x, mount.y - 10, def.color, 40);
-        burst(mount.x, mount.y - 10, def.color, 8, 2, 120);
-        closePanel();
-      });
-      buildpanelEl.appendChild(btn);
-    }
-  } else {
-    const t = mount.turret;
-    const def = TURRET_TYPES[t.type];
-    const info = document.createElement("div");
-    info.className = "build-btn";
-    info.style.cursor = "default";
-    info.innerHTML = `${shapeIcon(def.cls, def.color)}<span>${def.name} LV${t.level}</span><span style="color:#8fa5d8">${def.desc}</span>`;
-    buildpanelEl.appendChild(info);
-
-    if (t.level < MAX_LEVEL) {
-      const cost = upgradeCost(t.type, t.level);
-      const up = document.createElement("button");
-      up.className = "build-btn";
-      up.dataset.cost = cost;
-      up.innerHTML = `<span>UPGRADE</span><span>LV${t.level} &gt; LV${t.level + 1}</span><span class="cost"><span class="gem"></span>${cost}</span>`;
-      up.addEventListener("click", ev => {
-        ev.stopPropagation();
-        if (G.energy < cost) { sfx.deny(); return; }
-        G.energy -= cost;
-        t.level++;
-        sfx.upgrade();
-        addRing(mount.x, mount.y - 10, def.color, 50);
-        openPanelForMount(i);
-      });
-      buildpanelEl.appendChild(up);
-    }
-
-    const refund = Math.round(turretInvested(t) * 0.6);
-    const sell = document.createElement("button");
-    sell.className = "build-btn sell";
-    sell.innerHTML = `<span>SELL</span><span class="cost"><span class="gem"></span>+${refund}</span>`;
-    sell.addEventListener("click", ev => {
-      ev.stopPropagation();
-      G.energy += refund;
-      mount.turret = null;
-      sfx.sell();
-      closePanel();
-    });
-    buildpanelEl.appendChild(sell);
-  }
-  refreshPanelAffordability();
-}
-
-function refreshPanelAffordability() {
-  if (buildpanelEl.style.display !== "flex") return;
-  for (const btn of buildpanelEl.querySelectorAll(".build-btn[data-cost]")) {
-    btn.disabled = G.energy < +btn.dataset.cost;
-  }
-}
-
-function closePanel() {
-  G.selectedMount = -1;
-  buildpanelEl.style.display = "none";
-  bottombarEl.style.visibility = "visible";
+function builtMount(key) {
+  return G.mounts.find(m => m.turret && m.turret.type === key);
 }
 
 /* ============================== input ============================== */
@@ -1729,12 +1700,11 @@ canvas.addEventListener("pointerdown", ev => {
   for (let i = 0; i < G.mounts.length; i++) {
     const m = G.mounts[i];
     if (dist(x, y, m.x, m.y - 10) <= Math.max(m.r * 1.5, 32)) {
-      if (G.selectedMount === i) closePanel();
-      else openPanelForMount(i);
+      G.selectedMount = G.selectedMount === i ? -1 : i; // toggle range display
       return;
     }
   }
-  closePanel();
+  G.selectedMount = -1;
 });
 
 document.addEventListener("keydown", ev => {
@@ -1777,7 +1747,7 @@ function setState(next) {
   overlayEl.classList.remove("home");
   hudEl.style.display = next === "menu" || next === "gameover" ? "none" : "flex";
   bottombarEl.style.display = next === "playing" ? "flex" : "none";
-  if (next !== "playing") closePanel();
+  if (next !== "playing") G.selectedMount = -1;
   overlayEl.style.display = "none";
 }
 
@@ -1790,10 +1760,11 @@ function resetRun() {
   G.bossSpawned = false;
   G.speed = 1;
   speedBtn.textContent = "x1";
-  G.energy = 90 + meta.react * 15;
   G.kills = 0;
   G.time = 0;
   G.perks = {};
+  G.combos = [];
+  pickState = null;
   G.hero = { level: 1, xp: 0, cd: 0, aim: -Math.PI / 2, flash: 0, pending: 0 };
   G.enemies = [];
   G.bullets = [];
@@ -1811,18 +1782,24 @@ function resetRun() {
   G.base.hp = G.base.maxHp;
   for (const m of G.mounts) m.turret = null;
   $("eliteTag").hidden = !elite;
-  lastStage = lastEnergy = lastLvl = lastXp = -1;
+  lastStage = lastLvl = lastXp = -1;
   lastTimer = "";
 }
 
 function beginRun() {
   resetRun();
-  // start at the selected stage; later starts bring extra starting energy
+  // start at the selected stage; later starts grant instant level-ups
   G.stage = menuStage - 1;
-  G.energy += (menuStage - 1) * 30;
+  const bonusLv = Math.min(5, menuStage - 1);
   setState("playing");
   startStage();
-  showHint("TAP A GROUND SOCKET TO BUILD A TURRET", 4500);
+  showHint("LEVEL UP TO DEPLOY TURRETS", 4500);
+  if (bonusLv > 0) {
+    G.hero.level += bonusLv;
+    G.hero.pending += bonusLv;
+    sfx.levelUp();
+    showCards();
+  }
 }
 
 function showMenu() {
@@ -1859,7 +1836,7 @@ function showMenu() {
           <button class="tile" id="labTile">${shapeIcon("tri", "#35e0ff")}TURRETS</button>
           <div style="flex:1">
             <button class="battle-btn" id="playBtn">BATTLE</button>
-            <div class="battle-cost">${shapeIcon("dia", "#35e0ff", "width:10px;height:10px")} STAGE ${menuStage}${menuStage > 1 ? ` &middot; +${(menuStage - 1) * 30} ENERGY` : ""}</div>
+            <div class="battle-cost">${shapeIcon("dia", "#35e0ff", "width:10px;height:10px")} STAGE ${menuStage}${menuStage > 1 ? ` &middot; +${Math.min(5, menuStage - 1)} LEVEL-UPS` : ""}</div>
           </div>
           <button class="tile" id="shopTile">${shapeIcon("hex", "#ffd23f")}UPGRADES</button>
         </div>
@@ -1950,7 +1927,6 @@ function showTurretDetail(key) {
     ...kindStats[def.kind],
     ["RANGE", def.kind === "missile" ? "GLOBAL" : Math.round(s.range)],
     ...(s.splash ? [["SPLASH", Math.round(s.splash)]] : []),
-    ["BUILD COST", def.cost],
   ];
   const miles = [
     { lv: 2, html: `Unlock <span class="cardname">[${sigs[0].name}]</span> ${stars(1)}` },
@@ -2047,8 +2023,9 @@ function showIntel() {
     <div class="modal">
       <div class="title" style="font-size:clamp(24px,6vw,36px)">INTEL</div>
       <div class="subtitle">The sky is falling &mdash; in polygons. Your gunner auto-fires at the
-      lowest threat. Tap ground sockets to build turrets with energy from kills.
-      Level up to pick upgrade cards. Survive each stage's timer; every 5th stage a boss descends.</div>
+      lowest threat. Kills grant XP; every level-up offers cards: deploy and upgrade
+      turrets, take perks, and trigger turret combos. Survive each stage's timer;
+      every 5th stage a boss descends.</div>
       <div class="legend" style="margin-top:18px">
         <div>${shapeIcon("hex", "#cf8a5b")} METEOR</div>
         <div>${shapeIcon("tri", "#ff9a3d")} ZIGZAG</div>
@@ -2068,49 +2045,158 @@ function showIntel() {
   $("backBtn").addEventListener("click", showMenu);
 }
 
-function showCards() {
-  setState("picking");
-  let options = PERKS.filter(p => !(p.id === "repair" && G.base.hp >= G.base.maxHp));
-  // signature cards for turrets built this run, unlocked by their lab level
-  const sigs = [];
+let pickState = null; // { options, refresh } for the current level-up screen
+
+function rollCardOptions() {
+  const pool = [];
+  const builtCount = G.mounts.filter(m => m.turret).length;
+  const freeMount = G.mounts.some(m => !m.turret);
+  // turret build / upgrade cards
+  for (const key of TURRET_ORDER) {
+    if (!turretUnlocked(key)) continue;
+    const def = TURRET_TYPES[key];
+    const m = builtMount(key);
+    if (!m && freeMount) {
+      const card = { kind: "build", id: "build_" + key, key, cls: def.cls, color: def.color, name: def.name, desc: `Deploy: ${def.desc}`, isNew: true };
+      pool.push(card);
+      if (builtCount < 2) pool.push(card); // weight builds early, like the reference
+    } else if (m && m.turret.level < MAX_LEVEL) {
+      pool.push({ kind: "tlvl", id: "up_" + key, key, cls: def.cls, color: def.color, name: def.name + " +", desc: `Upgrade ${def.name} to LV${m.turret.level + 1}`, tlv: m.turret.level });
+    }
+  }
+  // generic perks
+  for (const p of PERKS) {
+    if (p.id === "repair" && G.base.hp >= G.base.maxHp) continue;
+    pool.push(p);
+  }
+  // signature cards for built turrets, unlocked by their lab level
   for (const m of G.mounts) {
     if (!m.turret) continue;
     const key = m.turret.type;
     for (const c of SIGNATURE_CARDS[key]) {
-      if (turretLv(key) >= sigUnlockLv(c.star) && !perkCount(c.id) && !sigs.some(x => x.id === c.id)) {
-        sigs.push({ ...c, cls: TURRET_TYPES[key].cls, color: TURRET_TYPES[key].color });
+      if (turretLv(key) >= sigUnlockLv(c.star) && !perkCount(c.id)) {
+        pool.push({ ...c, cls: TURRET_TYPES[key].cls, color: TURRET_TYPES[key].color });
       }
     }
   }
-  options = shuffle(options.concat(sigs)).slice(0, 3);
+  const picked = [];
+  for (const p of shuffle(pool)) {
+    if (!picked.some(x => x.id === p.id)) picked.push(p);
+    if (picked.length === 3) break;
+  }
+  return picked;
+}
+
+function trayHtml() {
+  const items = [];
+  for (const i of MOUNT_ORDER) {
+    const t = G.mounts[i].turret;
+    if (!t) continue;
+    const def = TURRET_TYPES[t.type];
+    items.push(`<div class="tray-chip">${shapeIcon(def.cls, def.color, "width:16px;height:16px")}<span>LV${t.level}</span></div>`);
+  }
+  const allSigs = Object.values(SIGNATURE_CARDS).flat();
+  for (const p of PERKS.concat(allSigs)) {
+    const n = perkCount(p.id);
+    if (!n) continue;
+    const cls = p.cls || "dia", color = p.color || "#ffd23f";
+    items.push(`<div class="tray-chip">${shapeIcon(cls, color, "width:16px;height:16px")}<span>x${n}</span></div>`);
+  }
+  for (const id of G.combos) {
+    const c = COMBOS.find(x => x.id === id);
+    items.push(`<div class="tray-chip" style="border-color:#ffd23f">${shapeIcon(TURRET_TYPES[c.turret].cls, "#ffd23f", "width:16px;height:16px")}<span>${c.name}</span></div>`);
+  }
+  return items.length ? `<div class="tray">${items.join("")}</div>` : "";
+}
+
+function showCards(fresh = true) {
+  setState("picking");
+  if (fresh || !pickState) pickState = { options: rollCardOptions(), refresh: 1 };
+  const options = pickState.options;
   overlayEl.style.display = "flex";
   overlayEl.innerHTML = `
     <div class="modal">
       <div class="title" style="font-size:clamp(22px,5vw,34px)">LEVEL UP &mdash; LV ${G.hero.level - G.hero.pending + 1}</div>
-      <div class="subtitle">Choose a system upgrade</div>
+      ${trayHtml()}
+      <div class="subtitle">Choose a card</div>
       <div class="cards">
         ${options.map((p, idx) => `
-          <button class="card" data-idx="${idx}" ${p.star ? `style="border-color:${p.color}"` : ""}>
+          <button class="card" data-idx="${idx}" ${p.star || p.kind === "build" ? `style="border-color:${p.color}"` : ""}>
+            ${p.isNew ? `<span class="new-tag">NEW</span>` : ""}
             ${shapeIcon(p.cls, p.color)}
             ${p.star ? `<span style="display:flex;gap:3px">${shapeIcon("dia", "#ffd23f", "width:9px;height:9px")}${p.star > 1 ? shapeIcon("dia", "#ffd23f", "width:9px;height:9px") : ""}</span>` : ""}
             <b>${p.name}</b>
             <span>${p.desc}</span>
-            ${!p.star && perkCount(p.id) ? `<span style="color:${p.color}">owned x${perkCount(p.id)}</span>` : ""}
+            ${!p.star && !p.kind && perkCount(p.id) ? `<span style="color:${p.color}">owned x${perkCount(p.id)}</span>` : ""}
           </button>`).join("")}
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:16px">
+        <button class="lab-upg" id="refreshBtn" style="margin-top:0;padding:11px 30px" ${pickState.refresh <= 0 ? "disabled" : ""}>REFRESH ${pickState.refresh}/1</button>
+        <button class="ghost-btn" id="combosBtn" style="margin-top:0">COMBOS</button>
       </div>
     </div>`;
   overlayEl.querySelectorAll(".card").forEach(btn => {
     btn.addEventListener("click", () => {
       applyPerk(options[+btn.dataset.idx]);
       sfx.card();
+      pickState = null;
       G.hero.pending--;
       if (G.hero.pending > 0) showCards();
       else setState("playing");
     });
   });
+  $("refreshBtn").addEventListener("click", () => {
+    if (pickState.refresh <= 0) { sfx.deny(); return; }
+    pickState = { options: rollCardOptions(), refresh: pickState.refresh - 1 };
+    sfx.build();
+    showCards(false);
+  });
+  $("combosBtn").addEventListener("click", showComboList);
+}
+
+function showComboList() {
+  overlayEl.style.display = "flex";
+  overlayEl.innerHTML = `
+    <div class="modal">
+      <div class="title" style="font-size:clamp(22px,5vw,32px)">TURRET COMBOS</div>
+      <div class="subtitle">Build the turret and hold the required cards &mdash; the combo activates on its own</div>
+      <div class="miles" style="max-height:340px">
+        ${COMBOS.map(c => {
+          const acquired = G.combos.includes(c.id);
+          const reqs = Object.entries(c.req).map(([k, n]) => {
+            const p = PERKS.find(x => x.id === k);
+            return `${n}x <span class="cardname">[${p ? p.name : k}]</span>`;
+          }).join(" + ");
+          const tdef = TURRET_TYPES[c.turret];
+          return `<div class="mile ${acquired ? "done" : ""}">
+            <span style="display:flex;align-items:center;gap:8px">${shapeIcon(tdef.cls, tdef.color, "width:14px;height:14px")}
+              <span><b style="color:${acquired ? "#38ffb0" : "#dfe8ff"}">${c.name}</b> &mdash; ${c.desc}<br>
+              <span style="opacity:.8">${tdef.name} + ${reqs}</span></span>
+            </span>
+            <b>${acquired ? "ACTIVE" : "&mdash;"}</b>
+          </div>`;
+        }).join("")}
+      </div>
+      <button class="ghost-btn" id="backBtn">BACK</button>
+    </div>`;
+  $("backBtn").addEventListener("click", () => showCards(false));
 }
 
 function applyPerk(p) {
+  if (p.kind === "build") {
+    placeTurret(p.key);
+    checkCombos();
+    return;
+  }
+  if (p.kind === "tlvl") {
+    const m = builtMount(p.key);
+    if (m && m.turret.level < MAX_LEVEL) {
+      m.turret.level++;
+      sfx.upgrade();
+      addRing(m.x, m.y - 10, p.color, 50);
+    }
+    return;
+  }
   G.perks[p.id] = (G.perks[p.id] || 0) + 1;
   const b = G.base;
   if (p.id === "repair") {
@@ -2123,6 +2209,7 @@ function applyPerk(p) {
     b.hp = Math.min(b.maxHp, b.hp + add);
   }
   addRing(heroX, groundY - 30, p.color, 120, 4);
+  checkCombos();
 }
 
 function gameOver() {
@@ -2138,7 +2225,7 @@ function gameOver() {
     G.highScore = G.score;
     localStorage.setItem("shapeDefense.highScore", String(G.score));
   }
-  const coresEarned = Math.max(1, Math.round(G.score / 150));
+  const coresEarned = Math.max(1, Math.round((G.score / 150) * coresMul()));
   cores += coresEarned;
   saveMeta();
   G.perks = {};

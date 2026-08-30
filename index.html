@@ -429,6 +429,21 @@
   }
   .lab-upg:disabled { filter: grayscale(0.8); opacity: 0.5; cursor: default; }
   .lab-upg:active:not(:disabled) { transform: scale(0.96); }
+  .tray { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .tray-chip {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 5px 8px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.04em; color: #9fb7ff;
+  }
+  .new-tag {
+    position: absolute; top: 8px; left: -6px;
+    background: #1fae9d; color: #04251f;
+    font-size: 9px; font-weight: 900; letter-spacing: 0.1em;
+    padding: 3px 8px; border-radius: 4px;
+    transform: rotate(-6deg);
+  }
+  .card { position: relative; }
 </style>
 </head>
 <body>
@@ -439,7 +454,6 @@
   <button class="icon-btn" id="speedBtn" aria-label="Game speed">x1</button>
   <div class="hud-chip" id="hud-stage">STAGE <b id="stageNum">1</b><span id="eliteTag" style="color:#ff3d6e" hidden>ELITE</span></div>
   <div class="hud-chip" id="hud-timer"><span id="timerNum">00:00</span></div>
-  <div class="hud-chip" id="hud-energy"><span class="gem"></span><span id="energyNum">0</span></div>
   <button class="icon-btn" id="muteBtn" aria-label="Mute"><span class="mute-glyph"></span></button>
   <div id="xpwrap">
     <div class="hud-chip" id="lvlTag">LV <b id="lvlNum">1</b></div>

@@ -26,15 +26,20 @@ Works with mouse and touch (mobile-friendly).
 - Meteors and alien shapes rain from the sky toward your **base** at the bottom
   of the screen. When its hull (3200) hits zero, the run ends.
 - Your **gunner auto-fires** glowing tracers at the lowest threat — you manage
-  everything around him.
-- Tap a dashed **ground socket** to build a turret; tap a built turret to
-  upgrade (3 levels) or sell. Kills earn **energy** (cyan diamonds) to spend.
-- Kills also grant **XP**. Each level-up pauses the fight to offer one of three
-  **upgrade cards** (damage, fire rate, split fire, repair, hull, crit, and more)
-  that stack for the run.
+  everything through cards.
+- Kills grant **XP**. Each level-up pauses the fight to offer one of three
+  **cards**: deploy a turret onto a ground socket, upgrade a built turret
+  (3 levels), or take a perk (damage, fire rate, split fire, repair, hull,
+  crit, XP, and more). One free **refresh** per level-up rerolls the offer,
+  and a tray shows everything acquired this run.
+- **Turret combos**: build a turret and hold its required cards and the combo
+  activates on its own — Flame Bullet, Shrapnel, Permafrost, Gamma Beam,
+  Seeker Crits, Ion Storm. The COMBOS button on the level-up screen lists
+  every recipe.
 - Survive each **stage's timer**; stages scale endlessly. Every 5th stage a
   **boss** descends — a volley-firing siege boss, or a Carrier that releases
-  swarms on the 10s. A **speed toggle** (x1/x2) keeps things moving.
+  swarms on the 10s. A **speed toggle** (x1/x2) keeps things moving. Starting
+  at a later stage (unlocked by clearing) grants instant level-ups.
 - Each run awards **cores** (score ÷ 150). Spend them in the main menu on
   permanent upgrades — hull plating, damage amp, reactor, harvester — that
   apply to every future run.
